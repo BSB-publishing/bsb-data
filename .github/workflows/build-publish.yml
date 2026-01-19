@@ -170,10 +170,14 @@ jobs:
 
           git push
 
-          # Create version tag
+          # Create version tag (skip if already exists)
           TAG="v${{ steps.versions.outputs.build_date }}-${{ steps.versions.outputs.bsb_sha }}"
-          git tag -a "$TAG" -m "BSB Data ${{ steps.versions.outputs.build_date }}"
-          git push origin "$TAG"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists, skipping tag creation"
+          else
+            git tag -a "$TAG" -m "BSB Data ${{ steps.versions.outputs.build_date }}"
+            git push origin "$TAG"
+          fi
 
           echo "TAG=$TAG" >> $GITHUB_ENV
 
@@ -193,17 +197,22 @@ jobs:
           zip -r "../bsb-data-${TAG}.zip" base/ schema/ VERSION.json README.md LICENSE-*.md ATTRIBUTION.md
           cd ..
 
-          # Create release with zip attached
-          gh release create "$TAG" \
-            --repo "${DATA_REPO_OWNER}/${DATA_REPO}" \
-            --title "BSB Data ${{ steps.versions.outputs.build_date }}" \
-            --notes "Source versions:
+          # Create release with zip attached (or update if exists)
+          if gh release view "$TAG" --repo "${DATA_REPO_OWNER}/${DATA_REPO}" >/dev/null 2>&1; then
+            echo "Release $TAG already exists, uploading zip to existing release"
+            gh release upload "$TAG" "bsb-data-${TAG}.zip" --repo "${DATA_REPO_OWNER}/${DATA_REPO}" --clobber
+          else
+            gh release create "$TAG" \
+              --repo "${DATA_REPO_OWNER}/${DATA_REPO}" \
+              --title "BSB Data ${{ steps.versions.outputs.build_date }}" \
+              --notes "Source versions:
           - BSB-USJ: \`${{ steps.versions.outputs.bsb_sha_full }}\`
           - Bible DBs: \`${{ steps.versions.outputs.bible_db_sha }}\`
           - OSHB: \`${{ steps.versions.outputs.oshb_sha }}\`
 
           Built from: ${{ github.repository }}@${{ github.sha }}" \
-            "bsb-data-${TAG}.zip"
+              "bsb-data-${TAG}.zip"
+          fi
 
           echo "- Release: https://github.com/${DATA_REPO_OWNER}/${DATA_REPO}/releases/tag/${TAG}" >> $GITHUB_STEP_SUMMARY
 
