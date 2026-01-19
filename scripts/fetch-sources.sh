@@ -74,8 +74,26 @@ should_download() {
     # Check remote timestamp to see if file has been updated
     local remote_date=$(curl -sI "$url" 2>/dev/null | grep -i "last-modified" | cut -d' ' -f2- | tr -d '\r')
     if [ -n "$remote_date" ]; then
-        local remote_ts=$(date -j -f "%a, %d %b %Y %H:%M:%S %Z" "$remote_date" "+%s" 2>/dev/null || echo "0")
-        local local_ts=$(stat -f "%m" "$file" 2>/dev/null || echo "0")
+        # Cross-platform date parsing (works on both macOS and Linux)
+        local remote_ts
+        if date --version >/dev/null 2>&1; then
+            # GNU date (Linux)
+            remote_ts=$(date -d "$remote_date" "+%s" 2>/dev/null || echo "0")
+        else
+            # BSD date (macOS)
+            remote_ts=$(date -j -f "%a, %d %b %Y %H:%M:%S %Z" "$remote_date" "+%s" 2>/dev/null || echo "0")
+        fi
+
+        # Cross-platform stat for file modification time
+        local local_ts
+        if stat --version >/dev/null 2>&1; then
+            # GNU stat (Linux)
+            local_ts=$(stat -c "%Y" "$file" 2>/dev/null || echo "0")
+        else
+            # BSD stat (macOS)
+            local_ts=$(stat -f "%m" "$file" 2>/dev/null || echo "0")
+        fi
+
         if [ "$remote_ts" -gt "$local_ts" ]; then
             return 0  # Remote is newer
         fi
