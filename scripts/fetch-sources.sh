@@ -72,34 +72,31 @@ should_download() {
     fi
 
     # Check remote timestamp to see if file has been updated
-    local remote_date=$(curl -sI "$url" 2>/dev/null | grep -i "last-modified" | cut -d' ' -f2- | tr -d '\r')
+    # Use subshell to prevent set -e from exiting on errors
+    local remote_date
+    remote_date=$(curl -sI "$url" 2>/dev/null | grep -i "last-modified" | cut -d' ' -f2- | tr -d '\r') || true
+
     if [ -n "$remote_date" ]; then
         # Cross-platform date parsing (works on both macOS and Linux)
-        local remote_ts
+        local remote_ts="0"
+        local local_ts="0"
+
         if date --version >/dev/null 2>&1; then
             # GNU date (Linux)
-            remote_ts=$(date -d "$remote_date" "+%s" 2>/dev/null || echo "0")
+            remote_ts=$(date -d "$remote_date" "+%s" 2>/dev/null) || remote_ts="0"
+            local_ts=$(stat -c "%Y" "$file" 2>/dev/null) || local_ts="0"
         else
             # BSD date (macOS)
-            remote_ts=$(date -j -f "%a, %d %b %Y %H:%M:%S %Z" "$remote_date" "+%s" 2>/dev/null || echo "0")
+            remote_ts=$(date -j -f "%a, %d %b %Y %H:%M:%S %Z" "$remote_date" "+%s" 2>/dev/null) || remote_ts="0"
+            local_ts=$(stat -f "%m" "$file" 2>/dev/null) || local_ts="0"
         fi
 
-        # Cross-platform stat for file modification time
-        local local_ts
-        if stat --version >/dev/null 2>&1; then
-            # GNU stat (Linux)
-            local_ts=$(stat -c "%Y" "$file" 2>/dev/null || echo "0")
-        else
-            # BSD stat (macOS)
-            local_ts=$(stat -f "%m" "$file" 2>/dev/null || echo "0")
-        fi
-
-        if [ "$remote_ts" -gt "$local_ts" ]; then
+        if [ "$remote_ts" != "0" ] && [ "$local_ts" != "0" ] && [ "$remote_ts" -gt "$local_ts" ]; then
             return 0  # Remote is newer
         fi
     fi
 
-    # File exists and is up to date: skip
+    # File exists and is up to date (or couldn't check): skip
     return 1
 }
 
