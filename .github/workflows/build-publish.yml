@@ -175,9 +175,37 @@ jobs:
           git tag -a "$TAG" -m "BSB Data ${{ steps.versions.outputs.build_date }}"
           git push origin "$TAG"
 
+          echo "TAG=$TAG" >> $GITHUB_ENV
+
           echo "### Published" >> $GITHUB_STEP_SUMMARY
           echo "- Data repo: https://github.com/${DATA_REPO_OWNER}/${DATA_REPO}" >> $GITHUB_STEP_SUMMARY
           echo "- Tag: \`$TAG\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Create Release with zip
+        if: steps.check.outputs.needs_build == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.DATA_REPO_TOKEN }}
+          DATA_REPO: ${{ vars.DATA_REPO || 'bsb-data-output' }}
+          DATA_REPO_OWNER: ${{ vars.DATA_REPO_OWNER || github.repository_owner }}
+        run: |
+          # Create zip of the output
+          cd data-repo
+          zip -r "../bsb-data-${TAG}.zip" base/ schema/ VERSION.json README.md LICENSE-*.md ATTRIBUTION.md
+          cd ..
+
+          # Create release with zip attached
+          gh release create "$TAG" \
+            --repo "${DATA_REPO_OWNER}/${DATA_REPO}" \
+            --title "BSB Data ${{ steps.versions.outputs.build_date }}" \
+            --notes "Source versions:
+          - BSB-USJ: \`${{ steps.versions.outputs.bsb_sha_full }}\`
+          - Bible DBs: \`${{ steps.versions.outputs.bible_db_sha }}\`
+          - OSHB: \`${{ steps.versions.outputs.oshb_sha }}\`
+
+          Built from: ${{ github.repository }}@${{ github.sha }}" \
+            "bsb-data-${TAG}.zip"
+
+          echo "- Release: https://github.com/${DATA_REPO_OWNER}/${DATA_REPO}/releases/tag/${TAG}" >> $GITHUB_STEP_SUMMARY
 
       - name: Skip message
         if: steps.check.outputs.needs_build == 'false'
