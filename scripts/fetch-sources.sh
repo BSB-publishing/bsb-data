@@ -108,7 +108,10 @@ download_file() {
 
     if should_download "$dest" "$url"; then
         echo "  Downloading $desc..."
-        curl -sfL "$url" -o "$dest" || { echo "    Warning: Failed to download $desc"; return 1; }
+        if ! curl -fL --retry 3 --retry-delay 2 "$url" -o "$dest"; then
+            echo "    Warning: Failed to download $desc from $url"
+            return 1
+        fi
         return 0
     else
         return 1  # Skipped
@@ -179,9 +182,9 @@ BASE_URL="https://raw.githubusercontent.com/BSB-publishing/bsb2usfm/main/results
 for BOOK in "${BOOKS[@]}"; do
     FILE="${BOOK}_full_strongs.usj"
     if download_file "$BASE_URL/$FILE" "$USJ_STRONGS_DIR/$FILE" "$FILE"; then
-        ((STRONGS_DOWNLOADED++))
+        STRONGS_DOWNLOADED=$((STRONGS_DOWNLOADED + 1))
     fi
-    ((STRONGS_COUNT++))
+    STRONGS_COUNT=$((STRONGS_COUNT + 1))
 done
 
 USJ_COUNT=$(ls -1 "$USJ_STRONGS_DIR"/*.usj 2>/dev/null | wc -l | tr -d ' ')
@@ -202,9 +205,9 @@ BASE_URL="https://raw.githubusercontent.com/BSB-publishing/bsb2usfm/main/results
 for BOOK in "${PLAIN_BOOKS[@]}"; do
     FILE="${BOOK}.usj"
     if download_file "$BASE_URL/$FILE" "$USJ_PLAIN_DIR/$FILE" "$FILE"; then
-        ((PLAIN_DOWNLOADED++))
+        PLAIN_DOWNLOADED=$((PLAIN_DOWNLOADED + 1))
     fi
-    ((PLAIN_COUNT++))
+    PLAIN_COUNT=$((PLAIN_COUNT + 1))
 done
 
 USJ_PLAIN_COUNT=$(ls -1 "$USJ_PLAIN_DIR"/*.usj 2>/dev/null | wc -l | tr -d ' ')
@@ -228,7 +231,7 @@ BASE_URL="https://raw.githubusercontent.com/scrollmapper/bible_databases/master/
 for i in 0 1 2 3 4 5 6; do
     FILE="cross_references_$i.json"
     if download_file "$BASE_URL/$FILE" "$XREF_DIR/$FILE" "$FILE"; then
-        ((XREF_DOWNLOADED++))
+        XREF_DOWNLOADED=$((XREF_DOWNLOADED + 1))
     fi
 done
 
@@ -256,7 +259,7 @@ BASE_URL="https://raw.githubusercontent.com/openscriptures/morphhb/master/wlc"
 for BOOK in "${OSHB_BOOKS[@]}"; do
     FILE="${BOOK}.xml"
     if download_file "$BASE_URL/$FILE" "$OSHB_DIR/$FILE" "$FILE"; then
-        ((OSHB_DOWNLOADED++))
+        OSHB_DOWNLOADED=$((OSHB_DOWNLOADED + 1))
     fi
 done
 
