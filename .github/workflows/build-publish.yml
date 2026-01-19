@@ -25,6 +25,19 @@ jobs:
       - name: Checkout code repo
         uses: actions/checkout@v4
 
+      # Generate token from GitHub App (for org repos)
+      # Requires secrets: APP_ID, APP_PRIVATE_KEY
+      # Or use DATA_REPO_TOKEN secret for personal repos
+      - name: Generate GitHub App token
+        id: app-token
+        if: ${{ vars.APP_ID != '' }}
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: ${{ vars.DATA_REPO_OWNER || github.repository_owner }}
+          repositories: ${{ vars.DATA_REPO || 'bsb-data-output' }}
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -114,7 +127,8 @@ jobs:
       - name: Publish to data repository
         if: steps.check.outputs.needs_build == 'true'
         env:
-          DATA_REPO_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+          # Use GitHub App token if available, otherwise fall back to PAT
+          DATA_REPO_TOKEN: ${{ steps.app-token.outputs.token || secrets.DATA_REPO_TOKEN }}
           DATA_REPO: ${{ vars.DATA_REPO || 'bsb-data-output' }}
           DATA_REPO_OWNER: ${{ vars.DATA_REPO_OWNER || github.repository_owner }}
         run: |
