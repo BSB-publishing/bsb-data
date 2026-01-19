@@ -43,6 +43,9 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Install dependencies
+        run: pip install .
+
       - name: Fetch source data
         run: bash scripts/fetch-sources.sh
 
