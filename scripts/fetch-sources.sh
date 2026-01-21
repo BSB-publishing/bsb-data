@@ -236,7 +236,7 @@ for i in 0 1 2 3 4 5 6; do
 done
 
 # Also get the text version for reference
-download_file "$BASE_URL/cross_references.txt" "$XREF_DIR/cross_references.txt" "cross_references.txt"
+download_file "$BASE_URL/cross_references.txt" "$XREF_DIR/cross_references.txt" "cross_references.txt" || true
 
 XREF_COUNT=$(ls -1 "$XREF_DIR"/cross_references*.json 2>/dev/null | wc -l | tr -d ' ')
 if [ "$XREF_DOWNLOADED" -gt 0 ]; then
@@ -247,7 +247,72 @@ fi
 echo ""
 
 # ============================================================================
-# 3. Fetch OpenScriptures OSHB (CC-BY 4.0)
+# 2b. Fetch Strong's lexicon from OpenScriptures (CC-BY-SA)
+# ============================================================================
+echo "--- Fetching Strong's Lexicon (CC-BY-SA) ---"
+STRONGS_DIR="$SOURCES_DIR/openscriptures-strongs"
+mkdir -p "$STRONGS_DIR"
+
+STRONGS_LEX_DOWNLOADED=0
+
+# Hebrew Strong's dictionary (JS format with JSON object)
+if download_file "https://raw.githubusercontent.com/openscriptures/strongs/master/hebrew/strongs-hebrew-dictionary.js" \
+                 "$STRONGS_DIR/strongs-hebrew-dictionary.js" "strongs-hebrew-dictionary.js"; then
+    STRONGS_LEX_DOWNLOADED=$((STRONGS_LEX_DOWNLOADED + 1))
+fi
+
+# Greek Strong's dictionary (JS format with JSON object)
+if download_file "https://raw.githubusercontent.com/openscriptures/strongs/master/greek/strongs-greek-dictionary.js" \
+                 "$STRONGS_DIR/strongs-greek-dictionary.js" "strongs-greek-dictionary.js"; then
+    STRONGS_LEX_DOWNLOADED=$((STRONGS_LEX_DOWNLOADED + 1))
+fi
+
+if [ "$STRONGS_LEX_DOWNLOADED" -gt 0 ]; then
+    echo "Downloaded $STRONGS_LEX_DOWNLOADED Strong's lexicon files"
+else
+    echo "Strong's lexicon files up to date"
+fi
+echo ""
+
+# ============================================================================
+# 2c. Fetch Nave's Topical Bible from CCEL (Public Domain)
+# ============================================================================
+echo "--- Fetching Nave's Topical Bible (Public Domain) ---"
+NAVES_DIR="$SOURCES_DIR/ccel-naves"
+mkdir -p "$NAVES_DIR"
+
+NAVES_DOWNLOADED=0
+
+# CCEL provides Nave's in ThML (XML) format with structured verse references
+if download_file "https://www.ccel.org/ccel/nave/bible.xml" \
+                 "$NAVES_DIR/naves-topical-bible.xml" "naves-topical-bible.xml"; then
+    NAVES_DOWNLOADED=$((NAVES_DOWNLOADED + 1))
+fi
+
+if [ "$NAVES_DOWNLOADED" -gt 0 ]; then
+    echo "Downloaded Nave's Topical Bible (CCEL XML)"
+else
+    echo "Nave's Topical Bible up to date"
+fi
+echo ""
+
+# ============================================================================
+# 3. Fetch BSB Tables (CC0)
+# ============================================================================
+echo "--- Fetching BSB Tables (CC0) ---"
+BSB_TABLES_DIR="$SOURCES_DIR/bsb-tables"
+mkdir -p "$BSB_TABLES_DIR"
+
+BSB_TABLES_URL="https://bereanbible.com/bsb_tables.tsv"
+if download_file "$BSB_TABLES_URL" "$BSB_TABLES_DIR/bsb_tables.tsv" "bsb_tables.tsv"; then
+    echo "Downloaded bsb_tables.tsv"
+else
+    echo "bsb_tables.tsv up to date"
+fi
+echo ""
+
+# ============================================================================
+# 4. Fetch OpenScriptures OSHB (CC-BY 4.0)
 # ============================================================================
 echo "--- Fetching OpenScriptures OSHB (CC-BY 4.0) ---"
 OSHB_DIR="$SOURCES_DIR/oshb/wlc"
@@ -284,6 +349,9 @@ echo "Source data locations:"
 echo "  BSB-USJ (Strong's): $USJ_STRONGS_DIR/ ($USJ_COUNT files)"
 echo "  BSB-USJ (plain):    $USJ_PLAIN_DIR/ ($USJ_PLAIN_COUNT files)"
 echo "  Cross-refs:         $XREF_DIR/ ($XREF_COUNT files)"
+echo "  Strong's lexicon:   $STRONGS_DIR/"
+echo "  Nave's topics:      $NAVES_DIR/"
+echo "  BSB Tables:         $BSB_TABLES_DIR/"
 echo "  OSHB:               $OSHB_DIR/ ($OSHB_COUNT files)"
 echo ""
 

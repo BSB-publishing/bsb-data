@@ -15,13 +15,21 @@ USJ_DIR = SOURCES_DIR / "bsb-usj" / "results_usj" / "strongs_full"
 USJ_PLAIN_DIR = SOURCES_DIR / "bsb-usj" / "results_usj" / "plain"
 BIBLE_DB_DIR = SOURCES_DIR / "bible-databases"
 OSHB_DIR = SOURCES_DIR / "oshb" / "wlc"
+BSB_TABLES_FILE = SOURCES_DIR / "bsb-tables" / "bsb_tables.tsv"
+STRONGS_DIR = SOURCES_DIR / "openscriptures-strongs"
+NAVES_DIR = SOURCES_DIR / "ccel-naves"
 
 # Output directories (under base/ for downstream extensibility)
 BASE_DIR = OUTPUT_DIR / "base"
 DISPLAY_DIR = BASE_DIR / "display"
-INDEX_PD_DIR = BASE_DIR / "index-pd"
-INDEX_CC_BY_DIR = BASE_DIR / "index-cc-by"
+INDEX_CC_BY_SPLIT_DIR = BASE_DIR / "index-cc-by"
+CONCORDANCE_DIR = BASE_DIR / "concordance"
 SCHEMA_DIR = OUTPUT_DIR / "schema"
+
+# Vector DB output directories (sibling to base/)
+VECTOR_DB_DIR = OUTPUT_DIR / "vector-db"
+INDEX_PD_DIR = VECTOR_DB_DIR / "index-pd"
+INDEX_CC_BY_DIR = VECTOR_DB_DIR / "index-cc-by"
 
 
 def ensure_dir(path: Path) -> None:
@@ -35,19 +43,25 @@ def read_json(path: Path) -> dict | list:
         return json.load(f)
 
 
-def write_json(path: Path, data: dict | list) -> None:
+def write_json(path: Path, data: dict | list, compact: bool = False) -> None:
     """Write JSON to file."""
     ensure_dir(path.parent)
     with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
+        if compact:
+            json.dump(data, f, ensure_ascii=False, separators=(",", ":"))
+        else:
+            json.dump(data, f, indent=2, ensure_ascii=False)
 
 
-def write_jsonl(path: Path, items: list) -> None:
+def write_jsonl(path: Path, items: list, compact: bool = True) -> None:
     """Write JSONL (JSON Lines) to file."""
     ensure_dir(path.parent)
     with open(path, "w", encoding="utf-8") as f:
         for item in items:
-            f.write(json.dumps(item, ensure_ascii=False) + "\n")
+            if compact:
+                f.write(json.dumps(item, ensure_ascii=False, separators=(",", ":")) + "\n")
+            else:
+                f.write(json.dumps(item, ensure_ascii=False) + "\n")
 
 
 def read_jsonl(path: Path) -> list:

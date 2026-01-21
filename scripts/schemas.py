@@ -1,22 +1,10 @@
 """JSON Schema definitions for BSB Data formats."""
 
-DISPLAY_SCHEMA = {
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "$id": "https://github.com/bsb-data/schema/display.schema.json",
-    "title": "BSB Display Verse",
-    "description": "Compact verse format for web rendering with Strong's numbers",
+WORD_ARRAY_SCHEMA = {
     "type": "object",
-    "required": ["b", "c", "v", "w"],
-    "properties": {
-        "b": {
-            "type": "string",
-            "description": "Book code (3-letter identifier)",
-            "pattern": "^[A-Z0-9]{3}$",
-            "examples": ["GEN", "EXO", "MAT", "1CO"],
-        },
-        "c": {"type": "integer", "description": "Chapter number", "minimum": 1},
-        "v": {"type": "integer", "description": "Verse number", "minimum": 1},
-        "w": {
+    "description": "Verse number mapped to word pairs array",
+    "patternProperties": {
+        "^\\d+$": {
             "type": "array",
             "description": "Word pairs: [text, strongs|null]",
             "items": {
@@ -32,20 +20,44 @@ DISPLAY_SCHEMA = {
                     },
                 ],
             },
+        }
+    },
+    "additionalProperties": False,
+}
+
+DISPLAY_SCHEMA = {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://github.com/bsb-data/schema/display.schema.json",
+    "title": "BSB Display Verse",
+    "description": "Verse format with English text and original language (Hebrew/Greek) for web rendering.",
+    "type": "object",
+    "required": ["eng"],
+    "properties": {
+        "eng": {
+            **WORD_ARRAY_SCHEMA,
+            "description": "English text in BSB word order",
         },
-        "citations": {
-            "type": "array",
-            "description": "Scripture citations from footnotes (e.g., references to parallel passages)",
-            "items": {"type": "string"},
-            "examples": [["2CO 4:6", "HEB 11:3"]],
+        "heb": {
+            **WORD_ARRAY_SCHEMA,
+            "description": "Hebrew text in Hebrew word order (OT only)",
+        },
+        "grk": {
+            **WORD_ARRAY_SCHEMA,
+            "description": "Greek text in Greek word order (NT only)",
         },
     },
-    "additionalProperties": True,
+    "additionalProperties": False,
+    "examples": [
+        {
+            "eng": {1: [["In the beginning", "H7225"], ["God", "H430"], ["created", "H1254"]]},
+            "heb": {1: [["בְּרֵאשִׁ֖ית", "H7225"], ["בָּרָ֣א", "H1254"], ["אֱלֹהִ֑ים", "H430"]]},
+        }
+    ],
 }
 
 INDEX_PD_SCHEMA = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "$id": "https://github.com/bsb-data/schema/index-pd.schema.json",
+    "$id": "https://github.com/bsb-data/schema/vector-db/index-pd.schema.json",
     "title": "BSB Index Verse (Public Domain)",
     "description": "Enriched verse format for vector DB indexing - Public Domain content only",
     "type": "object",
@@ -104,12 +116,12 @@ INDEX_PD_SCHEMA = {
 
 INDEX_CC_BY_SCHEMA = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "$id": "https://github.com/bsb-data/schema/index-cc-by.schema.json",
+    "$id": "https://github.com/bsb-data/schema/vector-db/index-cc-by.schema.json",
     "title": "BSB Index Verse (CC-BY)",
     "description": "Enriched verse format with OSHB morphology - requires CC-BY 4.0 attribution",
     "type": "object",
     "required": ["id", "b", "c", "v", "t", "s", "x", "tp", "g", "m"],
-    "allOf": [{"$ref": "index-pd.schema.json"}],
+    "allOf": [{"$ref": "vector-db/index-pd.schema.json"}],
     "properties": {
         "m": {
             "type": "array",
@@ -262,11 +274,15 @@ BOOK_CODES_SCHEMA = {
 
 
 def get_all_schemas() -> dict[str, dict]:
-    """Return all schemas as a dictionary."""
+    """Return all schemas as a dictionary.
+
+    Keys are relative paths from the schema directory.
+    Vector DB schemas are placed in a vector-db/ subdirectory.
+    """
     return {
         "display.schema.json": DISPLAY_SCHEMA,
-        "index-pd.schema.json": INDEX_PD_SCHEMA,
-        "index-cc-by.schema.json": INDEX_CC_BY_SCHEMA,
+        "vector-db/index-pd.schema.json": INDEX_PD_SCHEMA,
+        "vector-db/index-cc-by.schema.json": INDEX_CC_BY_SCHEMA,
         "headings.schema.json": HEADINGS_SCHEMA,
         "book-codes.schema.json": BOOK_CODES_SCHEMA,
     }

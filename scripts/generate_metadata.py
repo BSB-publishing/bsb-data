@@ -41,6 +41,7 @@ def generate_schemas() -> None:
     schemas = get_all_schemas()
     for filename, schema in schemas.items():
         path = SCHEMA_DIR / filename
+        ensure_dir(path.parent)
         write_json(path, schema)
         log(f"  Wrote {filename}")
 
@@ -104,17 +105,28 @@ cross-references, topics, and morphology.
 ```
 .
 ├── base/                    # Core data files
-│   ├── display/             # Per-book JSONL for web rendering
-│   │   └── {BOOK}.jsonl     # e.g., GEN.jsonl, MAT.jsonl
+│   ├── display/             # Per-chapter JSONL for web rendering
+│   │   └── {BOOK}/
+│   │       └── {BOOK}{chapter}.jsonl
+│   ├── index-cc-by/         # CC-BY index split by chapter (CC-BY 4.0)
+│   │   └── {BOOK}/
+│   │       └── {BOOK}{chapter}.jsonl
+│   ├── concordance/         # Strong's to verse mapping
+│   │   ├── strongs-to-verses.json
+│   │   └── strongs-to-verses.jsonl
+│   └── headings.jsonl       # Section headings index
+├── vector-db/               # Vector DB index files
 │   ├── index-pd/            # Vector DB index (Public Domain)
 │   │   └── bible-index.jsonl
 │   └── index-cc-by/         # Vector DB index with morphology (CC-BY 4.0)
 │       └── bible-index.jsonl
 ├── schema/                  # JSON schemas for all formats
 │   ├── display.schema.json
-│   ├── index-pd.schema.json
-│   ├── index-cc-by.schema.json
-│   └── book-codes.schema.json
+│   ├── headings.schema.json
+│   ├── book-codes.schema.json
+│   └── vector-db/
+│       ├── index-pd.schema.json
+│       └── index-cc-by.schema.json
 ├── VERSION.json             # Source versions and build date
 └── README.md                # This file
 ```
@@ -124,28 +136,35 @@ cross-references, topics, and morphology.
 | Directory | License | Attribution Required |
 |-----------|---------|---------------------|
 | `base/display/` | CC0 (Public Domain) | No |
-| `base/index-pd/` | CC0 (Public Domain) | No |
 | `base/index-cc-by/` | CC-BY 4.0 | **Yes** |
+| `base/concordance/` | CC0 (Public Domain) | No |
+| `vector-db/index-pd/` | CC0 (Public Domain) | No |
+| `vector-db/index-cc-by/` | CC-BY 4.0 | **Yes** |
 | `schema/` | CC0 (Public Domain) | No |
 
 ### CC-BY Attribution (required for index-cc-by)
 
-When using `base/index-cc-by/` data, include this attribution:
+When using `base/index-cc-by/` or `vector-db/index-cc-by/` data, include this attribution:
 
 > Hebrew morphology data from [Open Scriptures Hebrew Bible (OSHB)](https://hb.openscriptures.org/),
 > licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 
 ## Data Formats
 
-### Display Format (`base/display/*.jsonl`)
+### Display Format (`base/display/{BOOK}/{BOOK}{chapter}.jsonl`)
 
-Compact format optimized for web rendering:
+Compact format with English and original language (Hebrew/Greek) text. Each line is a single verse:
 
 ```json
-{"b":"GEN","c":1,"v":1,"w":[["In the beginning","H7225"],["God","H430"],["created","H1254"],["the heavens","H8064"],["and","H853"],["the earth","H776"],[".",null]]}
+{"eng":{1:[["In the beginning","H7225"],["God","H430"],["created","H1254"],...]},"heb":{1:[["בְּרֵאשִׁ֖ית","H7225"],["בָּרָ֣א","H1254"],["אֱלֹהִ֑ים","H430"],...]}}
 ```
 
-### Index Format (`base/index-pd/bible-index.jsonl`)
+For NT books, `grk` is used instead of `heb`:
+```json
+{"eng":{1:[["[This is the] record","G976"],["of [the] genealogy","G1078"],...]},"grk":{1:[["Βίβλος","G976"],["γενέσεως","G1078"],...]}}
+```
+
+### Index Format (`vector-db/index-pd/bible-index.jsonl`)
 
 Enriched format for vector DB indexing:
 
@@ -163,7 +182,7 @@ Enriched format for vector DB indexing:
 }
 ```
 
-### Index Format with Morphology (`base/index-cc-by/bible-index.jsonl`)
+### Index Format with Morphology (`vector-db/index-cc-by/bible-index.jsonl`)
 
 Same as index-pd plus morphology data:
 

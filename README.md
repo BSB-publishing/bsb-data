@@ -15,14 +15,22 @@ rebuilt and published when source data changes.
 
 ### Display Format (`base/display/`)
 - **License:** CC0 (Public Domain)
-- **Format:** One JSONL file per book (66 files)
-- **Purpose:** Compact format for web rendering with Strong's numbers
+- **Format:** JSONL files per chapter, organized by book
+- **Purpose:** Compact format for web rendering with Strong's numbers and original language text
 
+Structure: `display/{BOOK}/{BOOK}{chapter}.jsonl` (e.g., `display/GEN/GEN1.jsonl`)
+
+Each line is a single verse with both English and original language (Hebrew/Greek):
 ```json
-{"b":"GEN","c":1,"v":1,"w":[["In the beginning","H7225"],["God","H430"],["created","H1254"],...]}
+{"eng":{1:[["In the beginning","H7225"],["God","H430"],["created","H1254"],...]},"heb":{1:[["בְּרֵאשִׁ֖ית","H7225"],["בָּרָ֣א","H1254"],["אֱלֹהִ֑ים","H430"],...]}}}
 ```
 
-### Index Format - PD (`base/index-pd/`)
+For NT books, `grk` is used instead of `heb`:
+```json
+{"eng":{1:[["[This is the] record","G976"],["of [the] genealogy","G1078"],...]},"grk":{1:[["Βίβλος","G976"],["γενέσεως","G1078"],...]}}}
+```
+
+### Index Format - PD (`vector-db/index-pd/`)
 - **License:** CC0 (Public Domain)
 - **Format:** Single JSONL file with all verses
 - **Purpose:** Vector DB indexing with cross-references, topics, and glosses
@@ -31,7 +39,7 @@ rebuilt and published when source data changes.
 {"id":"GEN.1.1","b":"GEN","c":1,"v":1,"t":"In the beginning...","s":["H7225","H430"],"x":["JHN.1.1"],"tp":["Creation"],"g":{"H7225":"beginning"}}
 ```
 
-### Index Format - CC-BY (`base/index-cc-by/`)
+### Index Format - CC-BY (`vector-db/index-cc-by/`)
 - **License:** CC-BY 4.0 (includes OSHB morphology)
 - **Format:** Single JSONL file with all verses
 - **Purpose:** Vector DB indexing with full morphological data
@@ -39,6 +47,27 @@ rebuilt and published when source data changes.
 Includes all PD fields plus morphology:
 ```json
 {"m":[{"s":"H7225","m":"HR/Ncfsa","p":"noun","l":"רֵאשִׁית"},...]}
+```
+
+### Index Format - CC-BY Split (`base/index-cc-by/`)
+- **License:** CC-BY 4.0 (includes OSHB morphology)
+- **Format:** JSONL files per chapter, organized by book
+- **Purpose:** Same as vector-db/index-cc-by but split for easier chapter-by-chapter access
+
+Structure: `index-cc-by/{BOOK}/{BOOK}{chapter}.jsonl` (e.g., `index-cc-by/GEN/GEN1.jsonl`)
+
+### Concordance Index (`base/concordance/`)
+- **License:** CC0 (Public Domain)
+- **Format:** JSON and JSONL mapping Strong's numbers to verse references
+- **Purpose:** Pre-built concordance for lookups by Strong's number
+
+```json
+{"H1": ["GEN.1.1", "GEN.2.4", ...], "H2": ["GEN.4.1", ...], "G1": ["MAT.1.1", ...]}
+```
+
+Also available as JSONL for streaming:
+```json
+{"strongs": "H1", "verses": ["GEN.1.1", "GEN.2.4", ...]}
 ```
 
 ### HelloAO Format (`base/helloao/`)
@@ -112,6 +141,8 @@ python3 -m scripts.build
 python3 -m scripts.build --display
 python3 -m scripts.build --index-pd
 python3 -m scripts.build --index-cc-by
+python3 -m scripts.build --index-cc-by-split
+python3 -m scripts.build --concordance
 python3 -m scripts.build --helloao
 python3 -m scripts.build --text-only
 
@@ -125,12 +156,15 @@ After building, output is in:
 ```
 output/
 ├── base/
-│   ├── display/          # Per-book JSONL files
-│   ├── index-pd/         # Public Domain index with headings
-│   ├── index-cc-by/      # CC-BY index with morphology
+│   ├── display/          # Per-chapter JSONL files with eng + heb/grk
+│   ├── index-cc-by/      # CC-BY index split by chapter
+│   ├── concordance/      # Strong's to verse mapping
 │   ├── helloao/          # HelloAO-compatible JSON by book/chapter
 │   ├── text-only/        # Plain text files per chapter
 │   └── headings.jsonl    # Section headings index
+├── vector-db/
+│   ├── index-pd/         # Public Domain index with headings
+│   └── index-cc-by/      # CC-BY index with morphology
 ├── schema/               # JSON schemas
 ├── VERSION.json          # Source versions
 └── README.md             # Generated readme for data repo
@@ -174,6 +208,8 @@ bsb-data/
 │   ├── build_display.py       # Build display output
 │   ├── build_index_pd.py      # Build PD index
 │   ├── build_index_cc_by.py   # Build CC-BY index
+│   ├── build_index_cc_by_split.py  # Build CC-BY index split by chapter
+│   ├── build_concordance.py   # Build Strong's concordance
 │   ├── build_helloao.py       # Build HelloAO-compatible output
 │   ├── build_text_only.py     # Build text-only output
 │   ├── build_headings.py      # Extract section headings

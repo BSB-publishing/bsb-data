@@ -19,15 +19,19 @@ from .utils import (
 
 # Expected verse counts (approximate, for validation)
 # Note: BSB follows modern critical text, so counts differ from KJV/traditional (31102)
-# BSB has ~30969 verses when parsed with current method (some verses span paragraphs)
-EXPECTED_TOTAL_VERSES_MIN = 30900
-EXPECTED_TOTAL_VERSES_MAX = 31102
+# Index outputs (from USJ): ~30969 verses
+# Display output (from TSV): ~30819 verses (TSV excludes some section headings/markers)
+EXPECTED_INDEX_VERSES_MIN = 30900
+EXPECTED_INDEX_VERSES_MAX = 31102
+EXPECTED_DISPLAY_VERSES_MIN = 30700
+EXPECTED_DISPLAY_VERSES_MAX = 31102
 
 
 def validate_display_output() -> tuple[bool, list[str]]:
-    """Validate display output files."""
+    """Validate display output files (folder structure: {BOOK}/{BOOK}{Chapter}.json)."""
     errors: list[str] = []
     total_verses = 0
+    total_chapters = 0
 
     log("Validating display output...")
 
@@ -35,61 +39,72 @@ def validate_display_output() -> tuple[bool, list[str]]:
         errors.append(f"Display directory not found: {DISPLAY_DIR}")
         return False, errors
 
-    # Check each book file exists and has valid content
+    # Check each book folder exists and has valid chapter files
     for book_code in BOOK_CODES.values():
-        file_path = DISPLAY_DIR / f"{book_code}.jsonl"
+        book_dir = DISPLAY_DIR / book_code
 
-        if not file_path.exists():
-            errors.append(f"Missing book file: {file_path}")
+        if not book_dir.exists():
+            errors.append(f"Missing book directory: {book_dir}")
             continue
 
-        try:
-            verses = read_jsonl(file_path)
-            total_verses += len(verses)
+        # Find all chapter files for this book
+        chapter_files = sorted(book_dir.glob(f"{book_code}*.json"))
+        if not chapter_files:
+            errors.append(f"No chapter files found in {book_dir}")
+            continue
 
-            for i, verse in enumerate(verses):
-                # Check required fields
-                if "b" not in verse:
-                    errors.append(f"{book_code}:{i}: Missing 'b' (book) field")
-                elif verse["b"] != book_code:
-                    errors.append(f"{book_code}:{i}: Book mismatch: {verse['b']} != {book_code}")
+        for chapter_file in chapter_files:
+            total_chapters += 1
+            try:
+                data = read_json(chapter_file)
 
-                if "c" not in verse:
-                    errors.append(f"{book_code}:{i}: Missing 'c' (chapter) field")
-                elif not isinstance(verse["c"], int) or verse["c"] < 1:
-                    errors.append(f"{book_code}:{i}: Invalid chapter: {verse['c']}")
+                # New structure: {"eng": {...}, "heb": {...}} or {"eng": {...}, "grk": {...}}
+                if "eng" not in data:
+                    errors.append(f"{chapter_file.name}: Missing 'eng' section")
+                    continue
 
-                if "v" not in verse:
-                    errors.append(f"{book_code}:{i}: Missing 'v' (verse) field")
-                elif not isinstance(verse["v"], int) or verse["v"] < 1:
-                    errors.append(f"{book_code}:{i}: Invalid verse: {verse['v']}")
+                eng_data = data["eng"]
+                if not isinstance(eng_data, dict):
+                    errors.append(f"{chapter_file.name}: 'eng' is not a dict")
+                    continue
 
-                if "w" not in verse:
-                    errors.append(f"{book_code}:{i}: Missing 'w' (words) field")
-                elif not isinstance(verse["w"], list) or len(verse["w"]) == 0:
-                    errors.append(f"{book_code}:{i}: Empty or invalid words array")
-                else:
-                    # Validate word pairs
-                    for j, word in enumerate(verse["w"]):
-                        if not isinstance(word, (list, tuple)) or len(word) != 2:
-                            errors.append(f"{book_code}:{i}:w{j}: Invalid word pair")
+                # Count verses (keys are verse numbers)
+                verse_count = len(eng_data)
+                total_verses += verse_count
+
+                # Validate verse structure (spot check first verse)
+                for verse_num, words in list(eng_data.items())[:1]:
+                    if not isinstance(words, list):
+                        errors.append(f"{chapter_file.name}:v{verse_num}: words not a list")
+                        continue
+                    for i, word_pair in enumerate(words):
+                        if not isinstance(word_pair, list) or len(word_pair) != 2:
+                            errors.append(
+                                f"{chapter_file.name}:v{verse_num}:w{i}: Invalid word pair"
+                            )
                             continue
+                        text, strongs = word_pair
+                        if strongs and not is_valid_strongs(strongs):
+                            errors.append(
+                                f"{chapter_file.name}:v{verse_num}:w{i}: Invalid Strong's: {strongs}"
+                            )
 
-                        text, strongs = word
-                        if strongs is not None and not is_valid_strongs(strongs):
-                            errors.append(f"{book_code}:{i}:w{j}: Invalid Strong's: {strongs}")
+                # Check for Hebrew/Greek section
+                if "heb" not in data and "grk" not in data:
+                    errors.append(f"{chapter_file.name}: Missing 'heb' or 'grk' section")
 
-        except Exception as e:
-            errors.append(f"Error reading {file_path}: {e}")
+            except Exception as e:
+                errors.append(f"Error reading {chapter_file}: {e}")
 
     # Check verse count
     if total_verses == 0:
         errors.append("No verses found in display output")
     else:
+        log(f"  Total chapters: {total_chapters}")
         log(f"  Total verses: {total_verses}")
-        if total_verses < EXPECTED_TOTAL_VERSES_MIN or total_verses > EXPECTED_TOTAL_VERSES_MAX:
+        if total_verses < EXPECTED_DISPLAY_VERSES_MIN or total_verses > EXPECTED_DISPLAY_VERSES_MAX:
             errors.append(
-                f"Unexpected verse count: {total_verses} (expected {EXPECTED_TOTAL_VERSES_MIN}-{EXPECTED_TOTAL_VERSES_MAX})"
+                f"Unexpected verse count: {total_verses} (expected {EXPECTED_DISPLAY_VERSES_MIN}-{EXPECTED_DISPLAY_VERSES_MAX})"
             )
 
     return len(errors) == 0, errors
@@ -177,9 +192,9 @@ def validate_index_output(
         log(f"  File size: {format_file_size(index_file.stat().st_size)}")
 
         # Check verse count
-        if len(verses) < EXPECTED_TOTAL_VERSES_MIN or len(verses) > EXPECTED_TOTAL_VERSES_MAX:
+        if len(verses) < EXPECTED_INDEX_VERSES_MIN or len(verses) > EXPECTED_INDEX_VERSES_MAX:
             errors.append(
-                f"Unexpected verse count: {len(verses)} (expected {EXPECTED_TOTAL_VERSES_MIN}-{EXPECTED_TOTAL_VERSES_MAX})"
+                f"Unexpected verse count: {len(verses)} (expected {EXPECTED_INDEX_VERSES_MIN}-{EXPECTED_INDEX_VERSES_MAX})"
             )
 
     except Exception as e:

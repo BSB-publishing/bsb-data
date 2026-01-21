@@ -4,9 +4,11 @@
 import argparse
 import sys
 
+from .build_concordance import build_concordance
 from .build_display import build_display
 from .build_helloao import build_helloao
 from .build_index_cc_by import build_index_cc_by
+from .build_index_cc_by_split import build_index_cc_by_split
 from .build_index_pd import build_index_pd
 from .build_text_only import build_text_only
 from .generate_metadata import main as generate_metadata
@@ -20,8 +22,12 @@ def main() -> int:
     parser.add_argument("--display", action="store_true", help="Build display output only")
     parser.add_argument("--index-pd", action="store_true", help="Build PD index output only")
     parser.add_argument("--index-cc-by", action="store_true", help="Build CC-BY index output only")
+    parser.add_argument(
+        "--index-cc-by-split", action="store_true", help="Build split CC-BY index (per-chapter)"
+    )
     parser.add_argument("--helloao", action="store_true", help="Build helloao output only")
     parser.add_argument("--text-only", action="store_true", help="Build text-only output only")
+    parser.add_argument("--concordance", action="store_true", help="Build concordance index")
     parser.add_argument("--validate", action="store_true", help="Validate outputs after building")
     parser.add_argument(
         "--all", action="store_true", help="Build all outputs (default if no options specified)"
@@ -31,7 +37,13 @@ def main() -> int:
 
     # Default to building all if no specific options
     build_all = args.all or not (
-        args.display or args.index_pd or args.index_cc_by or args.helloao or args.text_only
+        args.display
+        or args.index_pd
+        or args.index_cc_by
+        or args.index_cc_by_split
+        or args.helloao
+        or args.text_only
+        or args.concordance
     )
 
     log("=== BSB Data Build Pipeline ===")
@@ -50,12 +62,20 @@ def main() -> int:
             build_index_cc_by()
             log("")
 
+        if args.index_cc_by_split or build_all:
+            build_index_cc_by_split()
+            log("")
+
         if args.helloao or build_all:
             build_helloao()
             log("")
 
         if args.text_only or build_all:
             build_text_only()
+            log("")
+
+        if args.concordance or build_all:
+            build_concordance()
             log("")
 
         # Always generate metadata when building all
