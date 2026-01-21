@@ -133,12 +133,15 @@ def load_oshb_morphology() -> dict[str, list[MorphologyEntry]]:
 
                     if lemma and morph:
                         # Parse lemma to Strong's number
-                        # Format: "b/7225" or "7225" -> "H7225"
+                        # Format: "b/7225", "7225", or "1254 a" -> "H7225", "H1254"
+                        # OSHB uses "number + letter" format for some lemmas
                         lemma_parts = lemma.split("/")
                         strongs_num = ""
                         for part in lemma_parts:
-                            if part.isdigit():
-                                strongs_num = f"H{int(part)}"
+                            # Extract numeric portion (handles "1254 a" format)
+                            num_match = re.match(r"(\d+)", part)
+                            if num_match:
+                                strongs_num = f"H{int(num_match.group(1))}"
                                 break
 
                         if strongs_num:
