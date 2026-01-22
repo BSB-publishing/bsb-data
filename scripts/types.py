@@ -156,6 +156,15 @@ class DisplayVerse(TypedDict, total=False):
     citations: list[str]  # Scripture citations from footnotes ["2CO 4:6", "HEB 11:3"]
 
 
+# UBS Gloss entry (richer than basic Strong's definition)
+class UBSGlossEntry(TypedDict, total=False):
+    lemma: str  # Hebrew/Greek word (e.g., "אָב", "ἀγάπη")
+    glosses: list[str]  # Translation options ["father", "ancestor"]
+    def_: str  # Short definition (key is "def" in JSON, but "def_" in Python)
+    xlit: str  # Transliteration (e.g., "ʼâb") - from OpenScriptures
+    pron: str  # Pronunciation guide (e.g., "awb") - from OpenScriptures
+
+
 # Index format - Public Domain only
 class IndexVersePD(TypedDict, total=False):
     id: str  # "GEN.1.1"
@@ -166,7 +175,7 @@ class IndexVersePD(TypedDict, total=False):
     s: list[str]  # Strong's numbers array
     x: list[str]  # Cross-references ["JHN.1.1", "HEB.11.3"]
     tp: list[str]  # Topics from Nave's
-    g: dict[str, str]  # Gloss/definitions {H7225: "beginning"}
+    g: dict[str, str]  # Gloss/definitions {H7225: "beginning"} (basic for PD)
     citations: list[str]  # Scripture citations from footnotes
     h: list[str]  # Heading IDs that appear before this verse ["GEN.s1.1", "GEN.r.1"]
 
@@ -179,9 +188,21 @@ class MorphologyEntry(TypedDict):
     l: str  # Lemma (Hebrew/Greek word)
 
 
-# Index format - CC-BY (includes morphology)
-class IndexVerseCCBY(IndexVersePD):
+# Index format - CC-BY (includes morphology and UBS lexicon data)
+class IndexVerseCCBY(TypedDict, total=False):
+    id: str  # "GEN.1.1"
+    b: str  # Book code
+    c: int  # Chapter
+    v: int  # Verse
+    t: str  # Plain text
+    s: list[str]  # Strong's numbers array
+    x: list[str]  # Cross-references ["JHN.1.1", "HEB.11.3"]
+    tp: list[str]  # Topics from Nave's
+    g: dict[str, UBSGlossEntry]  # UBS gloss data (richer than PD)
     m: list[MorphologyEntry]  # Morphology data from OSHB
+    dom: list[str]  # Semantic domains from UBS ["Family", "Creation"]
+    citations: list[str]  # Scripture citations from footnotes
+    h: list[str]  # Heading IDs that appear before this verse
 
 
 # Cross-reference from scrollmapper format

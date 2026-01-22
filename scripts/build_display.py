@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Build display output - JSON files per chapter for web rendering."""
+"""Build display output - JSON files per chapter for web rendering.
+
+ENG text comes from USJ source (includes punctuation).
+HEB/GRK text comes from TSV source (word-level alignment).
+"""
 
 import csv
 import re
@@ -7,10 +11,12 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
+from .convert_usj import parse_usj_file
 from .types import BOOK_CODES, BuildStats
 from .utils import (
     BSB_TABLES_FILE,
     DISPLAY_DIR,
+    USJ_DIR,
     ensure_dir,
     format_file_size,
     log,
@@ -98,6 +104,77 @@ BOOK_NAME_TO_CODE = {
     "Revelation": "REV",
 }
 
+# USJ filename mapping (book number -> filename prefix)
+# Note: USJ uses different numbering - NT starts at 41, not 40
+USJ_FILE_PREFIX = {
+    1: "01GEN",
+    2: "02EXO",
+    3: "03LEV",
+    4: "04NUM",
+    5: "05DEU",
+    6: "06JOS",
+    7: "07JDG",
+    8: "08RUT",
+    9: "091SA",
+    10: "102SA",
+    11: "111KI",
+    12: "122KI",
+    13: "131CH",
+    14: "142CH",
+    15: "15EZR",
+    16: "16NEH",
+    17: "17EST",
+    18: "18JOB",
+    19: "19PSA",
+    20: "20PRO",
+    21: "21ECC",
+    22: "22SNG",
+    23: "23ISA",
+    24: "24JER",
+    25: "25LAM",
+    26: "26EZK",
+    27: "27DAN",
+    28: "28HOS",
+    29: "29JOL",
+    30: "30AMO",
+    31: "31OBA",
+    32: "32JON",
+    33: "33MIC",
+    34: "34NAM",
+    35: "35HAB",
+    36: "36ZEP",
+    37: "37HAG",
+    38: "38ZEC",
+    39: "39MAL",
+    40: "41MAT",  # USJ numbering: 41
+    41: "42MRK",  # USJ numbering: 42
+    42: "43LUK",  # USJ numbering: 43
+    43: "44JHN",  # USJ numbering: 44
+    44: "45ACT",  # USJ numbering: 45
+    45: "46ROM",  # USJ numbering: 46
+    46: "471CO",  # USJ numbering: 47
+    47: "482CO",  # USJ numbering: 48
+    48: "49GAL",  # USJ numbering: 49
+    49: "50EPH",  # USJ numbering: 50
+    50: "51PHP",  # USJ numbering: 51
+    51: "52COL",  # USJ numbering: 52
+    52: "531TH",  # USJ numbering: 53
+    53: "542TH",  # USJ numbering: 54
+    54: "551TI",  # USJ numbering: 55
+    55: "562TI",  # USJ numbering: 56
+    56: "57TIT",  # USJ numbering: 57
+    57: "58PHM",  # USJ numbering: 58
+    58: "59HEB",  # USJ numbering: 59
+    59: "60JAS",  # USJ numbering: 60
+    60: "611PE",  # USJ numbering: 61
+    61: "622PE",  # USJ numbering: 62
+    62: "631JN",  # USJ numbering: 63
+    63: "642JN",  # USJ numbering: 64
+    64: "653JN",  # USJ numbering: 65
+    65: "66JUD",  # USJ numbering: 66
+    66: "67REV",  # USJ numbering: 67
+}
+
 
 def parse_verse_id(verse_id: str) -> tuple[str, int, int] | None:
     """Parse VerseId like 'Genesis 1:1' to (book_code, chapter, verse)."""
@@ -128,12 +205,53 @@ def parse_verse_id(verse_id: str) -> tuple[str, int, int] | None:
         return None
 
 
-def load_tsv_data() -> dict:
-    """Load and parse the BSB tables TSV file.
+def load_usj_data() -> dict:
+    """Load English text from USJ files.
 
-    Returns a nested dict structure for building display files.
+    Returns a nested dict: {book: {chapter: {verse: [[text, strongs], ...]}}}
     """
-    log("Loading BSB tables TSV...")
+    log("Loading USJ data for English text...")
+
+    if not USJ_DIR.exists():
+        log(f"ERROR: USJ directory not found: {USJ_DIR}")
+        log("  Run: bash scripts/fetch-sources.sh")
+        sys.exit(1)
+
+    # Structure: {book: {chapter: {verse: [[text, strongs], ...]}}}
+    data: dict = defaultdict(lambda: defaultdict(dict))
+
+    for book_num, book_code in BOOK_CODES.items():
+        prefix = USJ_FILE_PREFIX.get(book_num)
+        if not prefix:
+            continue
+
+        usj_file = USJ_DIR / f"{prefix}BSB_full_strongs.usj"
+        if not usj_file.exists():
+            log(f"  WARNING: USJ file not found: {usj_file}")
+            continue
+
+        verses = parse_usj_file(usj_file)
+
+        for verse in verses:
+            book = verse["b"]
+            chapter = verse["c"]
+            verse_num = verse["v"]
+            words = verse["w"]
+
+            # Convert word tuples to list format [[text, strongs], ...]
+            word_list = [[text, strongs] for text, strongs in words]
+            data[book][chapter][verse_num] = word_list
+
+    log(f"  Loaded USJ data for {len(data)} books")
+    return data
+
+
+def load_tsv_original_language_data() -> dict:
+    """Load Hebrew/Greek text from TSV file.
+
+    Returns a nested dict: {book: {chapter: {verse: {"orig": [[text, strongs], ...], "lang": "heb"|"grk"}}}}
+    """
+    log("Loading TSV data for Hebrew/Greek text...")
 
     if not BSB_TABLES_FILE.exists():
         log(f"ERROR: BSB tables file not found: {BSB_TABLES_FILE}")
@@ -145,9 +263,9 @@ def load_tsv_data() -> dict:
     current_chapter = None
     current_verse = None
 
-    # Structure: {book: {chapter: {verse: {"eng": {sort: [text, strongs]}, "orig": {sort: [text, strongs]}, "lang": "heb"|"grk"}}}}
+    # Structure: {book: {chapter: {verse: {"orig": {sort: [text, strongs]}, "lang": "heb"|"grk"}}}}
     data: dict = defaultdict(
-        lambda: defaultdict(lambda: defaultdict(lambda: {"eng": {}, "orig": {}, "lang": "heb"}))
+        lambda: defaultdict(lambda: defaultdict(lambda: {"orig": {}, "lang": "heb"}))
     )
 
     with open(BSB_TABLES_FILE, encoding="utf-8") as f:
@@ -160,13 +278,11 @@ def load_tsv_data() -> dict:
 
             heb_sort = row[0]
             grk_sort = row[1]
-            bsb_sort = row[2]
             language = row[4]
             orig_text = row[5]  # Hebrew or Greek text
             strongs_heb = row[10] if len(row) > 10 else ""
             strongs_grk = row[11] if len(row) > 11 else ""
             verse_id_col = row[12] if len(row) > 12 else ""
-            eng_text = row[18] if len(row) > 18 else ""
 
             # Parse verse reference if present
             if verse_id_col and ":" in verse_id_col:
@@ -182,8 +298,8 @@ def load_tsv_data() -> dict:
             if language not in ("Hebrew", "Greek"):
                 continue
 
-            # Skip empty content rows
-            if not orig_text.strip() and not eng_text.strip():
+            # Skip empty original text
+            if not orig_text.strip():
                 continue
 
             # Determine Strong's number and sort order
@@ -202,21 +318,14 @@ def load_tsv_data() -> dict:
                 if strongs in ("H", "G", "H-", "G-"):
                     strongs = None
 
-            bsb_sort_num = int(bsb_sort) if bsb_sort.isdigit() else 999999
-
             verse_data = data[current_book][current_chapter][current_verse]
             verse_data["lang"] = "heb" if language == "Hebrew" else "grk"
 
-            # Store English text with BSB sort order
-            if eng_text.strip():
-                verse_data["eng"][bsb_sort_num] = [clean_text(eng_text.strip()), strongs]
+            # Store original text (Hebrew/Greek) with sort order
+            cleaned_orig = clean_text(orig_text.strip())
+            verse_data["orig"][orig_sort] = [cleaned_orig, strongs]
 
-            # Store original text (Hebrew/Greek) with original sort order
-            if orig_text.strip():
-                cleaned_orig = clean_text(orig_text.strip())
-                verse_data["orig"][orig_sort] = [cleaned_orig, strongs]
-
-    log(f"  Loaded data for {len(data)} books")
+    log(f"  Loaded TSV data for {len(data)} books")
     return data
 
 
@@ -224,11 +333,14 @@ def build_display() -> BuildStats:
     """Build display output files."""
     log("Building display output...")
 
-    # Load TSV data
-    tsv_data = load_tsv_data()
+    # Load ENG data from USJ
+    usj_data = load_usj_data()
 
-    if not tsv_data:
-        log("ERROR: No data loaded from TSV")
+    # Load HEB/GRK data from TSV
+    tsv_data = load_tsv_original_language_data()
+
+    if not usj_data:
+        log("ERROR: No data loaded from USJ")
         sys.exit(1)
 
     # Ensure output directory exists
@@ -241,38 +353,42 @@ def build_display() -> BuildStats:
     for book_num, book_code in BOOK_CODES.items():
         log(f"Processing {book_code} ({book_num}/{total_books})")
 
-        if book_code not in tsv_data:
-            log(f"  WARNING: No data for {book_code}")
+        if book_code not in usj_data:
+            log(f"  WARNING: No USJ data for {book_code}")
             continue
 
-        book_data = tsv_data[book_code]
+        usj_book_data = usj_data[book_code]
+        tsv_book_data = tsv_data.get(book_code, {})
         stats.books_processed += 1
 
         # Create book directory
         book_dir = DISPLAY_DIR / book_code
         ensure_dir(book_dir)
 
-        for chapter in sorted(book_data.keys()):
-            chapter_data = book_data[chapter]
+        # Get all chapters from USJ (primary source for chapters)
+        chapters = sorted(usj_book_data.keys())
+
+        for chapter in chapters:
+            usj_chapter_data = usj_book_data[chapter]
+            tsv_chapter_data = tsv_book_data.get(chapter, {})
 
             # Build chapter output structure
             eng_output = {}
             orig_output = {}
-            lang_key = "heb"  # Default, will be overwritten
 
-            for verse in sorted(chapter_data.keys()):
-                verse_data = chapter_data[verse]
-                lang_key = verse_data["lang"]
+            # Determine language from TSV data (heb or grk)
+            lang_key = "heb"  # Default for OT
+            if book_num >= 40:  # NT books
+                lang_key = "grk"
 
-                # Build English word list (sorted by BSB order)
-                eng_words = []
-                for sort_key in sorted(verse_data["eng"].keys()):
-                    eng_words.append(verse_data["eng"][sort_key])
+            # Check TSV data for actual language
+            for verse in tsv_chapter_data:
+                if tsv_chapter_data[verse].get("lang"):
+                    lang_key = tsv_chapter_data[verse]["lang"]
+                    break
 
-                # Build original language word list (sorted by sort order)
-                orig_words = []
-                for sort_key in sorted(verse_data["orig"].keys()):
-                    orig_words.append(verse_data["orig"][sort_key])
+            for verse in sorted(usj_chapter_data.keys()):
+                eng_words = usj_chapter_data[verse]
 
                 if eng_words:
                     eng_output[str(verse)] = eng_words
@@ -283,8 +399,14 @@ def build_display() -> BuildStats:
                             stats.words_with_strongs += 1
                             stats.unique_strongs.add(strongs)
 
-                if orig_words:
-                    orig_output[str(verse)] = orig_words
+                # Get original language words from TSV
+                tsv_verse_data = tsv_chapter_data.get(verse, {})
+                if tsv_verse_data and "orig" in tsv_verse_data:
+                    orig_words = []
+                    for sort_key in sorted(tsv_verse_data["orig"].keys()):
+                        orig_words.append(tsv_verse_data["orig"][sort_key])
+                    if orig_words:
+                        orig_output[str(verse)] = orig_words
 
             if eng_output:
                 # Build final chapter JSON
@@ -298,7 +420,7 @@ def build_display() -> BuildStats:
                 write_json(output_path, chapter_output, compact=True)
                 files_written += 1
 
-        log(f"  Wrote {len(book_data)} chapters")
+        log(f"  Wrote {len(chapters)} chapters")
 
     # Write stats
     stats_dict = stats.to_dict()

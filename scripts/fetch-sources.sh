@@ -337,6 +337,101 @@ fi
 echo ""
 
 # ============================================================================
+# 5. Fetch UBS Dictionaries (CC-BY-SA 4.0)
+# ============================================================================
+echo "--- Fetching UBS Dictionaries (CC-BY-SA 4.0) ---"
+UBS_DIR="$SOURCES_DIR/ubs-dictionaries"
+mkdir -p "$UBS_DIR"
+
+UBS_DOWNLOADED=0
+
+# Hebrew dictionary (latest version)
+if download_file "https://raw.githubusercontent.com/ubsicap/ubs-open-license/main/dictionaries/hebrew/JSON/UBSHebrewDic-v0.9.1-en.JSON" \
+                 "$UBS_DIR/UBSHebrewDic-en.json" "UBS Hebrew Dictionary"; then
+    UBS_DOWNLOADED=$((UBS_DOWNLOADED + 1))
+fi
+
+# Greek dictionary (latest version)
+if download_file "https://raw.githubusercontent.com/ubsicap/ubs-open-license/main/dictionaries/greek/JSON/UBSGreekNTDic-v1.1-en.JSON" \
+                 "$UBS_DIR/UBSGreekNTDic-en.json" "UBS Greek Dictionary"; then
+    UBS_DOWNLOADED=$((UBS_DOWNLOADED + 1))
+fi
+
+if [ "$UBS_DOWNLOADED" -gt 0 ]; then
+    echo "Downloaded $UBS_DOWNLOADED UBS dictionary files"
+else
+    echo "UBS dictionary files up to date"
+fi
+echo ""
+
+# ============================================================================
+# 6. Fetch UBS Additional Resources (CC-BY-SA 4.0)
+# ============================================================================
+echo "--- Fetching UBS Additional Resources (CC-BY-SA 4.0) ---"
+
+# 6a. Lexical Domains (taxonomy hierarchy)
+if download_file "https://raw.githubusercontent.com/ubsicap/ubs-open-license/main/dictionaries/hebrew/JSON/UBSHebrewDicLexicalDomains-v0.9.1-en.JSON" \
+                 "$UBS_DIR/UBSHebrewDicLexicalDomains-en.json" "Hebrew Lexical Domains"; then
+    UBS_DOWNLOADED=$((UBS_DOWNLOADED + 1))
+fi
+
+if download_file "https://raw.githubusercontent.com/ubsicap/ubs-open-license/main/dictionaries/greek/JSON/UBSGreekNTDicLexicalDomains-v1.1-en.JSON" \
+                 "$UBS_DIR/UBSGreekNTDicLexicalDomains-en.json" "Greek Lexical Domains"; then
+    UBS_DOWNLOADED=$((UBS_DOWNLOADED + 1))
+fi
+
+# 6b. Contextual Domains (Hebrew only - figurative usage)
+if download_file "https://raw.githubusercontent.com/ubsicap/ubs-open-license/main/dictionaries/hebrew/JSON/UBSHebrewDicContextualDomains-v0.9.1-en.JSON" \
+                 "$UBS_DIR/UBSHebrewDicContextualDomains-en.json" "Hebrew Contextual Domains"; then
+    UBS_DOWNLOADED=$((UBS_DOWNLOADED + 1))
+fi
+
+# 6c. Parallel Passages
+if download_file "https://raw.githubusercontent.com/ubsicap/ubs-open-license/main/parallel%20passages/ParallelPassages.xml" \
+                 "$UBS_DIR/ParallelPassages.xml" "Parallel Passages"; then
+    UBS_DOWNLOADED=$((UBS_DOWNLOADED + 1))
+fi
+
+echo ""
+
+# ============================================================================
+# 7. Fetch WLC MARBLE Index (CC-BY-SA 4.0)
+# ============================================================================
+echo "--- Fetching WLC MARBLE Index (CC-BY-SA 4.0) ---"
+MARBLE_DIR="$UBS_DIR/marble"
+mkdir -p "$MARBLE_DIR"
+
+# OT book codes for MARBLE index
+MARBLE_BOOKS=(
+    "GEN" "EXO" "LEV" "NUM" "DEU"
+    "JOS" "JDG" "RUT" "1SA" "2SA"
+    "1KI" "2KI" "1CH" "2CH" "EZR"
+    "NEH" "EST" "JOB" "PSA" "PRO"
+    "ECC" "SNG" "ISA" "JER" "LAM"
+    "EZK" "DAN" "HOS" "JOL" "AMO"
+    "OBA" "JON" "MIC" "NAM" "HAB"
+    "ZEP" "HAG" "ZEC" "MAL"
+)
+
+MARBLE_DOWNLOADED=0
+BASE_URL="https://raw.githubusercontent.com/ubsicap/ubs-open-license/main/index/WLC/JSON"
+
+for BOOK in "${MARBLE_BOOKS[@]}"; do
+    FILE="MARBLELinks-${BOOK}.json"
+    if download_file "$BASE_URL/$FILE" "$MARBLE_DIR/$FILE" "$FILE"; then
+        MARBLE_DOWNLOADED=$((MARBLE_DOWNLOADED + 1))
+    fi
+done
+
+MARBLE_COUNT=$(ls -1 "$MARBLE_DIR"/*.json 2>/dev/null | wc -l | tr -d ' ')
+if [ "$MARBLE_DOWNLOADED" -gt 0 ]; then
+    echo "Downloaded $MARBLE_DOWNLOADED MARBLE index files (total: $MARBLE_COUNT)"
+else
+    echo "MARBLE index files up to date ($MARBLE_COUNT files)"
+fi
+echo ""
+
+# ============================================================================
 # Summary
 # ============================================================================
 
@@ -353,6 +448,8 @@ echo "  Strong's lexicon:   $STRONGS_DIR/"
 echo "  Nave's topics:      $NAVES_DIR/"
 echo "  BSB Tables:         $BSB_TABLES_DIR/"
 echo "  OSHB:               $OSHB_DIR/ ($OSHB_COUNT files)"
+echo "  UBS Dictionaries:   $UBS_DIR/"
+echo "  UBS MARBLE Index:   $MARBLE_DIR/ ($MARBLE_COUNT files)"
 echo ""
 
 # Show total size

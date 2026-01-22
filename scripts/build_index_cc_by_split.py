@@ -91,6 +91,19 @@ def build_index_cc_by_split() -> BuildStats:
                     compact_verse["h"] = verse["h"]
                 if "citations" in verse:
                     compact_verse["citations"] = verse["citations"]
+                if "dom" in verse:
+                    compact_verse["dom"] = verse["dom"]
+                # New UBS enrichment fields
+                if "ws" in verse:
+                    compact_verse["ws"] = verse["ws"]
+                if "img" in verse:
+                    compact_verse["img"] = verse["img"]
+                if "map" in verse:
+                    compact_verse["map"] = verse["map"]
+                if "msense" in verse:
+                    compact_verse["msense"] = verse["msense"]
+                if "par" in verse:
+                    compact_verse["par"] = verse["par"]
                 compact_verses.append(compact_verse)
 
             # Write chapter file: {BOOK}/{BOOK}{chapter}.jsonl
@@ -120,7 +133,9 @@ def build_index_cc_by_split() -> BuildStats:
     log(f"Total output size: {format_file_size(total_size)}")
 
     log("")
-    log("NOTE: This output contains CC-BY 4.0 licensed content from OSHB.")
+    log("NOTE: This output contains:")
+    log("      - CC-BY 4.0 licensed content from OSHB (morphology)")
+    log("      - CC-BY-SA 4.0 licensed content from UBS (lexicon, sense data, images, maps)")
     log("      See ATTRIBUTION.md for required attribution.")
 
     return stats

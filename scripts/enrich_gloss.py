@@ -1,4 +1,9 @@
-"""Add Strong's glosses/definitions to verse data."""
+"""Add Strong's glosses/definitions to verse data.
+
+This module provides two functions:
+1. load_strongs_lexicon() - Basic glosses for PD (public domain) output
+2. load_strongs_pronunciation() - Transliteration/pronunciation data to merge with UBS
+"""
 
 import json
 import re
@@ -45,6 +50,8 @@ def load_strongs_lexicon() -> dict[str, str]:
     """
     Load Strong's lexicon data from OpenScriptures.
     Returns a dict mapping Strong's numbers to short glosses.
+
+    Used for PD (public domain) output where we need basic definitions.
     """
     lexicon: dict[str, str] = {}
 
@@ -93,10 +100,55 @@ def load_strongs_lexicon() -> dict[str, str]:
     return lexicon
 
 
+def load_strongs_pronunciation() -> dict[str, dict[str, str]]:
+    """
+    Load transliteration and pronunciation data from OpenScriptures Strong's.
+
+    Returns a dict mapping Strong's numbers to {xlit, pron}:
+    - xlit: Transliteration (e.g., "ʼâb" for H1)
+    - pron: Pronunciation guide (e.g., "awb" for H1)
+
+    Used to supplement UBS data which lacks this information.
+    """
+    pronunciation: dict[str, dict[str, str]] = {}
+
+    hebrew_path = STRONGS_DIR / "strongs-hebrew-dictionary.js"
+    greek_path = STRONGS_DIR / "strongs-greek-dictionary.js"
+
+    for path in [hebrew_path, greek_path]:
+        if not path.exists():
+            continue
+
+        log(f"Loading pronunciation data from {path.name}")
+        data = load_strongs_js_file(path)
+
+        for key, value in data.items():
+            strongs_num = key.upper()
+
+            if isinstance(value, dict):
+                entry: dict[str, str] = {}
+
+                xlit = value.get("xlit", "")
+                if xlit:
+                    entry["xlit"] = xlit
+
+                pron = value.get("pron", "")
+                if pron:
+                    entry["pron"] = pron
+
+                if entry and strongs_num not in pronunciation:
+                    pronunciation[strongs_num] = entry
+
+    if pronunciation:
+        log(f"  Loaded pronunciation for {len(pronunciation)} entries")
+
+    return pronunciation
+
+
 def enrich_with_glosses(
     verses: list[dict[str, Any]], lexicon: dict[str, str]
 ) -> list[dict[str, Any]]:
-    """Add Strong's glosses to verse data."""
+    """Add Strong's glosses to verse data (for PD output)."""
     enriched = []
 
     for verse in verses:
@@ -117,3 +169,36 @@ def enrich_with_glosses(
         enriched.append(enriched_verse)
 
     return enriched
+
+
+def merge_pronunciation_with_ubs(
+    ubs_glosses: dict[str, dict],
+    pronunciation: dict[str, dict[str, str]],
+) -> dict[str, dict]:
+    """
+    Merge OpenScriptures pronunciation data into UBS gloss entries.
+
+    Adds 'xlit' and 'pron' fields to each UBS entry where available.
+
+    Args:
+        ubs_glosses: Dict from enrich_ubs (Strong's -> {lemma, glosses, def})
+        pronunciation: Dict from load_strongs_pronunciation (Strong's -> {xlit, pron})
+
+    Returns:
+        Merged dict with pronunciation data added to UBS entries
+    """
+    merged = {}
+
+    for strongs_num, ubs_entry in ubs_glosses.items():
+        merged_entry = {**ubs_entry}
+
+        if strongs_num in pronunciation:
+            pron_data = pronunciation[strongs_num]
+            if "xlit" in pron_data:
+                merged_entry["xlit"] = pron_data["xlit"]
+            if "pron" in pron_data:
+                merged_entry["pron"] = pron_data["pron"]
+
+        merged[strongs_num] = merged_entry
+
+    return merged

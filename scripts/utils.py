@@ -18,6 +18,8 @@ OSHB_DIR = SOURCES_DIR / "oshb" / "wlc"
 BSB_TABLES_FILE = SOURCES_DIR / "bsb-tables" / "bsb_tables.tsv"
 STRONGS_DIR = SOURCES_DIR / "openscriptures-strongs"
 NAVES_DIR = SOURCES_DIR / "ccel-naves"
+UBS_DIR = SOURCES_DIR / "ubs-dictionaries"
+MARBLE_DIR = UBS_DIR / "marble"
 
 # Output directories (under base/ for downstream extensibility)
 BASE_DIR = OUTPUT_DIR / "base"

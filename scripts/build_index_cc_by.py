@@ -7,9 +7,13 @@ from typing import Any
 
 from .build_headings import build_headings
 from .convert_usj import parse_usj_file
-from .enrich_gloss import enrich_with_glosses, load_strongs_lexicon
+from .enrich_gloss import load_strongs_pronunciation, merge_pronunciation_with_ubs
+from .enrich_marble import build_marble_index, enrich_with_marble
 from .enrich_morphology import enrich_with_morphology, load_oshb_morphology
+from .enrich_parallel import build_parallel_index, enrich_with_parallels
 from .enrich_topics import enrich_with_topics, load_topics
+from .enrich_ubs import enrich_with_ubs, load_ubs_lexicon
+from .enrich_ubs_refs import enrich_with_sense_data, load_ubs_sense_index
 from .enrich_xrefs import enrich_with_xrefs, load_cross_references
 from .types import BOOK_CODES, USJ_FILES, BuildStats, IndexVerseCCBY
 from .utils import (
@@ -58,8 +62,12 @@ def build_index_cc_by() -> BuildStats:
     log("Loading enrichment data...")
     xrefs = load_cross_references()
     topics = load_topics()
-    lexicon = load_strongs_lexicon()
+    ubs_lexicon = load_ubs_lexicon()
+    pronunciation = load_strongs_pronunciation()
     morphology = load_oshb_morphology()
+    sense_index = load_ubs_sense_index()
+    marble_index = build_marble_index()
+    parallel_index = build_parallel_index()
 
     log("")
     log("Processing books...")
@@ -138,18 +146,45 @@ def build_index_cc_by() -> BuildStats:
     log("  Adding topics...")
     all_verses = enrich_with_topics(all_verses, topics)
 
-    log("  Adding glosses...")
-    all_verses = enrich_with_glosses(all_verses, lexicon)
+    log("  Adding UBS lexicon data (CC-BY-SA content)...")
+    all_verses = enrich_with_ubs(all_verses, ubs_lexicon)
+
+    log("  Merging pronunciation data...")
+    # Merge pronunciation into each verse's 'g' field
+    for verse in all_verses:
+        if "g" in verse:
+            verse["g"] = merge_pronunciation_with_ubs(verse["g"], pronunciation)
 
     log("  Adding morphology (CC-BY content)...")
     all_verses = enrich_with_morphology(all_verses, morphology)
 
+    log("  Adding UBS sense disambiguation...")
+    all_verses = enrich_with_sense_data(all_verses, sense_index)
+
+    log("  Adding MARBLE media links (CC-BY-SA content)...")
+    all_verses = enrich_with_marble(all_verses, marble_index)
+
+    log("  Adding parallel passage references...")
+    all_verses = enrich_with_parallels(all_verses, parallel_index)
+
     # Count enrichment stats
+    verses_with_sense = 0
+    verses_with_images = 0
+    verses_with_maps = 0
+    verses_with_parallels = 0
     for v in all_verses:
         stats.total_cross_references += len(v.get("x", []))
         stats.total_topics += len(v.get("tp", []))
         if v.get("m"):
             verses_with_morph += 1
+        if v.get("ws"):
+            verses_with_sense += 1
+        if v.get("img"):
+            verses_with_images += 1
+        if v.get("map"):
+            verses_with_maps += 1
+        if v.get("par"):
+            verses_with_parallels += 1
 
     # Write output
     log("")
@@ -157,9 +192,13 @@ def build_index_cc_by() -> BuildStats:
     output_path = INDEX_CC_BY_DIR / "bible-index.jsonl"
     write_jsonl(output_path, all_verses)
 
-    # Write stats with morphology info
+    # Write stats with all enrichment info
     stats_dict = stats.to_dict()
     stats_dict["verses_with_morphology"] = verses_with_morph
+    stats_dict["verses_with_sense_data"] = verses_with_sense
+    stats_dict["verses_with_images"] = verses_with_images
+    stats_dict["verses_with_maps"] = verses_with_maps
+    stats_dict["verses_with_parallels"] = verses_with_parallels
     stats_path = INDEX_CC_BY_DIR / "stats.json"
     write_json(stats_path, stats_dict)
 
@@ -174,13 +213,19 @@ def build_index_cc_by() -> BuildStats:
     log(f"Total cross-references: {stats.total_cross_references}")
     log(f"Total topic assignments: {stats.total_topics}")
     log(f"Verses with morphology: {verses_with_morph}")
+    log(f"Verses with sense data: {verses_with_sense}")
+    log(f"Verses with images: {verses_with_images}")
+    log(f"Verses with maps: {verses_with_maps}")
+    log(f"Verses with parallels: {verses_with_parallels}")
 
     output_size = output_path.stat().st_size
     log(f"Output file: {output_path}")
     log(f"Output size: {format_file_size(output_size)}")
 
     log("")
-    log("NOTE: This output contains CC-BY 4.0 licensed content from OSHB.")
+    log("NOTE: This output contains:")
+    log("      - CC-BY 4.0 licensed content from OSHB (morphology)")
+    log("      - CC-BY-SA 4.0 licensed content from UBS (lexicon, sense data, images, maps)")
     log("      See ATTRIBUTION.md for required attribution.")
 
     return stats
