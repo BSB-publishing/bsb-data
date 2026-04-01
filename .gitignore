@@ -23,6 +23,9 @@ wheels/
 venv/
 ENV/
 
+# Examples
+example/
+
 # Source data (downloaded separately)
 sources/
 

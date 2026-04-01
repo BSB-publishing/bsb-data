@@ -26,9 +26,78 @@ The following sources are in the public domain and require no attribution (thoug
 - **License:** Public Domain
 - **Description:** Hebrew and Greek lexicon data
 
+### BSB English Concordance
+- **Source:** Berean Bible (bereanbible.com/bsb_concordance.xlsx)
+- **License:** CC0 1.0 Universal
+- **Description:** English word concordance for BSB text (downloaded as XLSX, converted to CSV)
+
 ---
 
 ## CC-BY 4.0 Licensed Content
+
+The following attribution is **required** when using data from these sources:
+
+### STEPBible Data (TIPNR - Proper Names)
+
+> Proper names data from STEPBible Data Repository.
+> 
+> **STEPBible** is licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
+> 
+> Source: https://github.com/STEPBible/STEPBible-Data
+> 
+> Credit: STEP Bible (www.STEPBible.org)
+
+### OpenBible Geocoding Data
+
+> Geographic data (coordinates, place types, modern identifications, Wikidata links) from OpenBible Bible Geocoding Data.
+>
+> **OpenBible Geocoding** is licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
+>
+> Source: https://github.com/openbibleinfo/Bible-Geocoding-Data
+>
+> © OpenBible.info
+
+### STEPBible Extended Lexicons (TBESH/TBESG)
+
+> Extended Strong's lexicon data from STEPBible Data Repository.
+>
+> **STEPBible** is licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
+>
+> Source: https://github.com/STEPBible/STEPBible-Data
+>
+> JSON conversion: [@metaxia/scriptures-source-stepbible-lexicon](https://www.npmjs.com/package/@metaxia/scriptures-source-stepbible-lexicon)
+>
+> Credit: Tyndale House, Cambridge (www.STEPBible.org)
+
+---
+
+## CC-BY-SA 4.0 Licensed Content
+
+The following attribution is **required** when using data from these sources:
+
+### UBS Paratext Versification Data
+
+> Versification mapping data from UBS Paratext versification_json.
+>
+> **UBS Versification** is licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
+>
+> Source: https://github.com/ubsicap/versification_json
+>
+> © United Bible Societies
+
+### UBS Dictionaries and MARBLE Index
+
+> Hebrew and Greek dictionary data and MARBLE semantic links.
+>
+> **UBS Dictionaries** are licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
+>
+> Source: https://github.com/ubsicap/ubs-open-license
+>
+> © United Bible Societies
+
+---
+
+## CC-BY 4.0 Licensed Content (Morphology)
 
 The following attribution is **required** when using the `output/index-cc-by/` data:
 
@@ -70,9 +139,18 @@ Source repository: https://github.com/openscriptures/morphhb
 
 | Output Directory | License | Attribution Required |
 |-----------------|---------|---------------------|
-| `output/display/` | CC0 | No |
-| `output/index-pd/` | CC0 | No |
-| `output/index-cc-by/` | CC-BY 4.0 | **Yes** (see above) |
+| `output/base/display/` | CC0 | No |
+| `output/vector-db/index-pd/` | CC0 | No |
+| `output/base/concordance/` | CC0 | No |
+| `output/base/english-concordance/` | CC0 | No |
+| `output/base/helloao/` | CC0 | No |
+| `output/base/text-only/` | CC0 | No |
+| `output/base/geography/` | CC-BY 4.0 | **Yes** (OpenBible) |
+| `output/base/proper-names/` | CC-BY 4.0 | **Yes** (STEPBible TIPNR) |
+| `output/base/lexicon/` | CC-BY 4.0 | **Yes** (STEPBible TBESH/TBESG) |
+| `output/base/versification/` | CC-BY-SA 4.0 | **Yes** (UBS Paratext) |
+| `output/vector-db/index-cc-by/` | CC-BY 4.0 | **Yes** (OSHB morphology) |
+| `output/base/index-cc-by/` | CC-BY 4.0 | **Yes** (OSHB morphology) |
 
 If you are unsure which data to use:
 - Use `index-pd/` if you want to avoid attribution requirements

@@ -10,6 +10,9 @@ from .utils import (
     DISPLAY_DIR,
     INDEX_CC_BY_DIR,
     INDEX_PD_DIR,
+    LEXICON_DIR,
+    PROPER_NAMES_DIR,
+    VERSIFICATION_DIR,
     format_file_size,
     is_valid_strongs,
     log,
@@ -233,6 +236,164 @@ def validate_no_cc_by_in_pd() -> tuple[bool, list[str]]:
     return len(errors) == 0, errors
 
 
+def validate_proper_names() -> tuple[bool, list[str]]:
+    """Validate proper names output."""
+    errors: list[str] = []
+
+    log("Validating proper names output...")
+
+    if not PROPER_NAMES_DIR.exists():
+        log("  Skipping (proper names not built)")
+        return True, errors
+
+    stats_file = PROPER_NAMES_DIR / "stats.json"
+    if not stats_file.exists():
+        errors.append("Missing stats.json in proper-names/")
+        return False, errors
+
+    stats = read_json(stats_file)
+    people_count = stats.get("people_count", 0)
+    places_count = stats.get("places_count", 0)
+    other_count = stats.get("other_count", 0)
+
+    log(f"  People: {people_count:,}, Places: {places_count:,}, Other: {other_count:,}")
+
+    if people_count < 3000:
+        errors.append(f"Too few people entries: {people_count} (expected 3000+)")
+    if places_count < 900:
+        errors.append(f"Too few places entries: {places_count} (expected 900+)")
+    if other_count < 100:
+        errors.append(f"Too few other entries: {other_count} (expected 100+)")
+
+    # Validate JSON/JSONL pairs exist
+    for name in ("people", "places", "other"):
+        for ext in (".json", ".jsonl"):
+            path = PROPER_NAMES_DIR / f"{name}{ext}"
+            if not path.exists():
+                errors.append(f"Missing {path.name}")
+
+    # Spot-check people JSONL
+    people_jsonl = PROPER_NAMES_DIR / "people.jsonl"
+    if people_jsonl.exists():
+        entries = read_jsonl(people_jsonl)
+        if entries:
+            first = entries[0]
+            for field in ("id", "uniqueName", "type"):
+                if field not in first:
+                    errors.append(f"People entry missing '{field}' field")
+            if first.get("type") != "person":
+                errors.append(f"First people entry has wrong type: {first.get('type')}")
+
+    if not errors:
+        log("  OK")
+
+    return len(errors) == 0, errors
+
+
+def validate_versification() -> tuple[bool, list[str]]:
+    """Validate versification output."""
+    errors: list[str] = []
+
+    log("Validating versification output...")
+
+    if not VERSIFICATION_DIR.exists():
+        log("  Skipping (versification not built)")
+        return True, errors
+
+    stats_file = VERSIFICATION_DIR / "stats.json"
+    if not stats_file.exists():
+        errors.append("Missing stats.json in versification/")
+        return False, errors
+
+    stats = read_json(stats_file)
+    total_traditions = stats.get("total_traditions", 0)
+    total_mappings = stats.get("total_mappings", 0)
+
+    log(f"  Traditions: {total_traditions}, Mappings: {total_mappings:,}")
+
+    if total_traditions < 3:
+        errors.append(f"Too few traditions: {total_traditions} (expected 3+)")
+    if total_mappings < 5000:
+        errors.append(f"Too few mappings: {total_mappings} (expected 5000+)")
+
+    # Check required files
+    for name in ("eng", "lxx", "vul"):
+        for suffix in (".json", "_lookup.json"):
+            path = VERSIFICATION_DIR / f"{name}{suffix}"
+            if not path.exists():
+                errors.append(f"Missing {path.name}")
+
+    if not (VERSIFICATION_DIR / "max_verses.json").exists():
+        errors.append("Missing max_verses.json")
+
+    # Validate eng_lookup structure
+    eng_lookup = VERSIFICATION_DIR / "eng_lookup.json"
+    if eng_lookup.exists():
+        data = read_json(eng_lookup)
+        if "eng_to_tradition" not in data or "tradition_to_eng" not in data:
+            errors.append("eng_lookup.json missing required keys")
+
+    if not errors:
+        log("  OK")
+
+    return len(errors) == 0, errors
+
+
+def validate_lexicon() -> tuple[bool, list[str]]:
+    """Validate lexicon output."""
+    errors: list[str] = []
+
+    log("Validating lexicon output...")
+
+    if not LEXICON_DIR.exists():
+        log("  Skipping (lexicon not built)")
+        return True, errors
+
+    stats_file = LEXICON_DIR / "stats.json"
+    if not stats_file.exists():
+        errors.append("Missing stats.json in lexicon/")
+        return False, errors
+
+    stats = read_json(stats_file)
+    hebrew_count = stats.get("hebrew_entries", 0)
+    greek_count = stats.get("greek_entries", 0)
+
+    log(f"  Hebrew: {hebrew_count:,}, Greek: {greek_count:,}")
+
+    if hebrew_count < 9000:
+        errors.append(f"Too few Hebrew entries: {hebrew_count} (expected 9000+)")
+    if greek_count < 10000:
+        errors.append(f"Too few Greek entries: {greek_count} (expected 10000+)")
+
+    # Check required files
+    for name in ("hebrew", "greek"):
+        for ext in (".json", ".jsonl"):
+            path = LEXICON_DIR / f"{name}{ext}"
+            if not path.exists():
+                errors.append(f"Missing {path.name}")
+
+    for name in ("combined.json", "combined_compat.json", "glosses.json"):
+        if not (LEXICON_DIR / name).exists():
+            errors.append(f"Missing {name}")
+
+    # Spot-check a known entry in glosses
+    glosses_file = LEXICON_DIR / "glosses.json"
+    if glosses_file.exists():
+        glosses = read_json(glosses_file)
+        # Check both padded and non-padded keys
+        if "H0001" not in glosses:
+            errors.append("glosses.json missing H0001 (padded key)")
+        if "H1" not in glosses:
+            errors.append("glosses.json missing H1 (non-padded key)")
+        if "G3056" not in glosses:
+            errors.append("glosses.json missing G3056 (padded key)")
+
+    if not errors:
+        log("  OK")
+
+    return len(errors) == 0, errors
+
+
 def main() -> int:
     """Main validation entry point."""
     log("=== BSB Data Validation ===")
@@ -264,6 +425,27 @@ def main() -> int:
 
     # Check for license compliance
     valid, errors = validate_no_cc_by_in_pd()
+    if not valid:
+        all_valid = False
+        all_errors.extend(errors)
+    log("")
+
+    # Validate proper names
+    valid, errors = validate_proper_names()
+    if not valid:
+        all_valid = False
+        all_errors.extend(errors)
+    log("")
+
+    # Validate versification
+    valid, errors = validate_versification()
+    if not valid:
+        all_valid = False
+        all_errors.extend(errors)
+    log("")
+
+    # Validate lexicon
+    valid, errors = validate_lexicon()
     if not valid:
         all_valid = False
         all_errors.extend(errors)

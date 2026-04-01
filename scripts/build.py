@@ -6,6 +6,11 @@ import sys
 
 from .build_concordance import build_concordance
 from .build_display import build_display
+from .build_english_concordance import build_english_concordance
+from .build_geography import build_geography
+from .build_lexicon import build_lexicon
+from .build_proper_names import build_proper_names
+from .build_versification import build_versification
 from .build_helloao import build_helloao
 from .build_index_cc_by import build_index_cc_by
 from .build_index_cc_by_split import build_index_cc_by_split
@@ -28,6 +33,13 @@ def main() -> int:
     parser.add_argument("--helloao", action="store_true", help="Build helloao output only")
     parser.add_argument("--text-only", action="store_true", help="Build text-only output only")
     parser.add_argument("--concordance", action="store_true", help="Build concordance index")
+    parser.add_argument(
+        "--english-concordance", action="store_true", help="Build English concordance index"
+    )
+    parser.add_argument("--geography", action="store_true", help="Build geography data")
+    parser.add_argument("--proper-names", action="store_true", help="Build proper names data")
+    parser.add_argument("--versification", action="store_true", help="Build versification mappings")
+    parser.add_argument("--lexicon", action="store_true", help="Build extended Strong's lexicon")
     parser.add_argument("--validate", action="store_true", help="Validate outputs after building")
     parser.add_argument(
         "--all", action="store_true", help="Build all outputs (default if no options specified)"
@@ -44,6 +56,11 @@ def main() -> int:
         or args.helloao
         or args.text_only
         or args.concordance
+        or args.english_concordance
+        or args.geography
+        or args.proper_names
+        or args.versification
+        or args.lexicon
     )
 
     log("=== BSB Data Build Pipeline ===")
@@ -76,6 +93,26 @@ def main() -> int:
 
         if args.concordance or build_all:
             build_concordance()
+            log("")
+
+        if args.english_concordance or build_all:
+            build_english_concordance()
+            log("")
+
+        if args.geography or build_all:
+            build_geography()
+            log("")
+
+        if args.proper_names or build_all:
+            build_proper_names()
+            log("")
+
+        if args.versification or build_all:
+            build_versification()
+            log("")
+
+        if args.lexicon or build_all:
+            build_lexicon()
             log("")
 
         # Always generate metadata when building all

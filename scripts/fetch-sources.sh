@@ -432,6 +432,138 @@ fi
 echo ""
 
 # ============================================================================
+# 8. Fetch OpenBible Geocoding Data (CC-BY 4.0)
+# ============================================================================
+echo "--- Fetching OpenBible Geocoding Data (CC-BY 4.0) ---"
+GEOCODING_DIR="$SOURCES_DIR/openbible-geocoding"
+mkdir -p "$GEOCODING_DIR"
+
+GEOCODING_DOWNLOADED=0
+BASE_URL="https://raw.githubusercontent.com/openbibleinfo/Bible-Geocoding-Data/main/data"
+
+for GEO_FILE in ancient.jsonl modern.jsonl; do
+    if download_file "$BASE_URL/$GEO_FILE" "$GEOCODING_DIR/$GEO_FILE" "$GEO_FILE"; then
+        GEOCODING_DOWNLOADED=$((GEOCODING_DOWNLOADED + 1))
+    fi
+done
+
+if [ "$GEOCODING_DOWNLOADED" -gt 0 ]; then
+    echo "Downloaded $GEOCODING_DOWNLOADED geocoding files"
+else
+    echo "Geocoding files up to date"
+fi
+echo ""
+
+# ============================================================================
+# 9. Fetch BSB Concordance (CC0)
+# ============================================================================
+echo "--- Fetching BSB Concordance (CC0) ---"
+BSB_CONCORDANCE_DIR="$SOURCES_DIR/bsb_concordance"
+mkdir -p "$BSB_CONCORDANCE_DIR"
+
+BSB_CONC_DOWNLOADED=0
+
+if download_file "https://bereanbible.com/bsb_concordance.xlsx" \
+                 "$BSB_CONCORDANCE_DIR/bsb_concordance.xlsx" "bsb_concordance.xlsx"; then
+    BSB_CONC_DOWNLOADED=1
+fi
+
+# Convert XLSX to CSV if xlsx is newer or csv is missing
+if [ -f "$BSB_CONCORDANCE_DIR/bsb_concordance.xlsx" ]; then
+    if [ ! -f "$BSB_CONCORDANCE_DIR/bsb_concordance.csv" ] || \
+       [ "$BSB_CONCORDANCE_DIR/bsb_concordance.xlsx" -nt "$BSB_CONCORDANCE_DIR/bsb_concordance.csv" ] || \
+       [ "$BSB_CONC_DOWNLOADED" -eq 1 ]; then
+        echo "  Converting XLSX to CSV..."
+        if python3 "$SCRIPT_DIR/convert_xlsx_to_csv.py" \
+                   "$BSB_CONCORDANCE_DIR/bsb_concordance.xlsx" \
+                   "$BSB_CONCORDANCE_DIR/bsb_concordance.csv"; then
+            echo "  Conversion complete"
+        else
+            echo "  WARNING: XLSX to CSV conversion failed (openpyxl required: pip install openpyxl)"
+        fi
+    else
+        echo "bsb_concordance.csv up to date"
+    fi
+else
+    echo "  WARNING: Could not download bsb_concordance.xlsx"
+fi
+echo ""
+
+# ============================================================================
+# 10. Fetch STEPBible TIPNR Proper Names (CC-BY 4.0)
+# ============================================================================
+echo "--- Fetching STEPBible TIPNR Proper Names (CC-BY 4.0) ---"
+TIPNR_DIR="$SOURCES_DIR/stepbible-tipnr"
+mkdir -p "$TIPNR_DIR"
+
+TIPNR_DOWNLOADED=0
+BASE_URL="https://raw.githubusercontent.com/robertrouse/STEPBible-Data/master/json"
+
+for TIPNR_FILE in TIPNR_people.json TIPNR_places.json TIPNR_other.json; do
+    if download_file "$BASE_URL/$TIPNR_FILE" "$TIPNR_DIR/$TIPNR_FILE" "$TIPNR_FILE"; then
+        TIPNR_DOWNLOADED=$((TIPNR_DOWNLOADED + 1))
+    fi
+done
+
+if [ "$TIPNR_DOWNLOADED" -gt 0 ]; then
+    echo "Downloaded $TIPNR_DOWNLOADED TIPNR JSON files"
+else
+    echo "TIPNR files up to date"
+fi
+echo ""
+
+# ============================================================================
+# 11. Fetch STEPBible Extended Strong's Lexicons (CC-BY 4.0)
+# ============================================================================
+echo "--- Fetching STEPBible Extended Lexicons (CC-BY 4.0) ---"
+LEXICON_DIR="$SOURCES_DIR/stepbible-lexicon"
+mkdir -p "$LEXICON_DIR"
+
+LEXICON_DOWNLOADED=0
+
+# Check if lexicon files already exist
+if [ ! -f "$LEXICON_DIR/stepbible-tbesh.json" ] || [ ! -f "$LEXICON_DIR/stepbible-tbesg.json" ] || [ "$FORCE" = true ]; then
+    echo "  Downloading from npm package @metaxia/scriptures-source-stepbible-lexicon..."
+    LEXICON_TMP=$(mktemp -d)
+    if npm pack @metaxia/scriptures-source-stepbible-lexicon --pack-destination "$LEXICON_TMP" >/dev/null 2>&1; then
+        tar xzf "$LEXICON_TMP"/metaxia-scriptures-source-stepbible-lexicon-*.tgz -C "$LEXICON_TMP"
+        cp "$LEXICON_TMP/package/data/stepbible-tbesh.json" "$LEXICON_DIR/"
+        cp "$LEXICON_TMP/package/data/stepbible-tbesg.json" "$LEXICON_DIR/"
+        LEXICON_DOWNLOADED=2
+        echo "  Downloaded Hebrew (TBESH) and Greek (TBESG) lexicons"
+    else
+        echo "  Warning: Failed to download lexicon package (npm required)"
+    fi
+    rm -rf "$LEXICON_TMP"
+else
+    echo "  STEPBible lexicon files up to date"
+fi
+echo ""
+
+# ============================================================================
+# 12. Fetch UBS Versification Data (CC-BY-SA 4.0)
+# ============================================================================
+echo "--- Fetching Versification Data (CC-BY-SA 4.0) ---"
+VERSIFICATION_DIR="$SOURCES_DIR/versification"
+mkdir -p "$VERSIFICATION_DIR"
+
+VERS_DOWNLOADED=0
+BASE_URL="https://raw.githubusercontent.com/ubsicap/versification_json/master/examples"
+
+for VERS_FILE in eng.json lxx.json vul.json org.json; do
+    if download_file "$BASE_URL/$VERS_FILE" "$VERSIFICATION_DIR/$VERS_FILE" "$VERS_FILE"; then
+        VERS_DOWNLOADED=$((VERS_DOWNLOADED + 1))
+    fi
+done
+
+if [ "$VERS_DOWNLOADED" -gt 0 ]; then
+    echo "Downloaded $VERS_DOWNLOADED versification files"
+else
+    echo "Versification files up to date"
+fi
+echo ""
+
+# ============================================================================
 # Summary
 # ============================================================================
 
@@ -450,6 +582,11 @@ echo "  BSB Tables:         $BSB_TABLES_DIR/"
 echo "  OSHB:               $OSHB_DIR/ ($OSHB_COUNT files)"
 echo "  UBS Dictionaries:   $UBS_DIR/"
 echo "  UBS MARBLE Index:   $MARBLE_DIR/ ($MARBLE_COUNT files)"
+echo "  Geocoding:          $GEOCODING_DIR/"
+echo "  BSB Concordance:    $BSB_CONCORDANCE_DIR/"
+echo "  TIPNR (names):      $TIPNR_DIR/"
+echo "  STEPBible Lexicons: $LEXICON_DIR/"
+echo "  Versification:      $VERSIFICATION_DIR/"
 echo ""
 
 # Show total size
