@@ -1,7 +1,7 @@
 # Thin wrapper around scripts/fetch-sources.sh and scripts/build.py.
 # Use `make help` to see available targets.
 
-PYTHON ?= python
+PYTHON ?= python3
 BUILD  := $(PYTHON) -m scripts.build
 
 # USJ-dependent builders — re-run these after fetching a new BSB-USJ release.
