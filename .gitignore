@@ -29,8 +29,14 @@ example/
 # Source data (downloaded separately)
 sources/
 
-# Build output (published to separate data repo)
-output/
+# Build output (published to separate data repo) — keep text-only and greek-tsv,
+# ignore the rest. Negations require un-ignoring each parent dir level by level.
+output/*
+!output/base
+output/base/*
+!output/base/text-only
+!output/base/greek-tsv
+!output/base/hebrew-tsv
 
 # OS files
 .DS_Store

@@ -30,6 +30,8 @@ VERSIFICATION_DIR_SRC = SOURCES_DIR / "versification"
 # Output directories (under base/ for downstream extensibility)
 BASE_DIR = OUTPUT_DIR / "base"
 DISPLAY_DIR = BASE_DIR / "display"
+GREEK_TSV_DIR = BASE_DIR / "greek-tsv"
+HEBREW_TSV_DIR = BASE_DIR / "hebrew-tsv"
 INDEX_CC_BY_SPLIT_DIR = BASE_DIR / "index-cc-by"
 CONCORDANCE_DIR = BASE_DIR / "concordance"
 ENGLISH_CONCORDANCE_DIR = BASE_DIR / "english-concordance"

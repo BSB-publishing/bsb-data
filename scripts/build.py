@@ -8,6 +8,8 @@ from .build_concordance import build_concordance
 from .build_display import build_display
 from .build_english_concordance import build_english_concordance
 from .build_geography import build_geography
+from .build_greek_tsv import build_greek_tsv
+from .build_hebrew_tsv import build_hebrew_tsv
 from .build_lexicon import build_lexicon
 from .build_proper_names import build_proper_names
 from .build_versification import build_versification
@@ -37,6 +39,12 @@ def main() -> int:
         "--english-concordance", action="store_true", help="Build English concordance index"
     )
     parser.add_argument("--geography", action="store_true", help="Build geography data")
+    parser.add_argument(
+        "--greek-tsv", action="store_true", help="Build Greek-only slim TSV export"
+    )
+    parser.add_argument(
+        "--hebrew-tsv", action="store_true", help="Build Hebrew-only slim TSV export"
+    )
     parser.add_argument("--proper-names", action="store_true", help="Build proper names data")
     parser.add_argument("--versification", action="store_true", help="Build versification mappings")
     parser.add_argument("--lexicon", action="store_true", help="Build extended Strong's lexicon")
@@ -58,6 +66,8 @@ def main() -> int:
         or args.concordance
         or args.english_concordance
         or args.geography
+        or args.greek_tsv
+        or args.hebrew_tsv
         or args.proper_names
         or args.versification
         or args.lexicon
@@ -101,6 +111,14 @@ def main() -> int:
 
         if args.geography or build_all:
             build_geography()
+            log("")
+
+        if args.greek_tsv or build_all:
+            build_greek_tsv()
+            log("")
+
+        if args.hebrew_tsv or build_all:
+            build_hebrew_tsv()
             log("")
 
         if args.proper_names or build_all:
