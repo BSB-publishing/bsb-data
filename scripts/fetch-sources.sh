@@ -118,42 +118,6 @@ download_file() {
     fi
 }
 
-# Book file patterns: 01-39 OT, 41-67 NT (no 40)
-BOOKS=(
-    "01GENBSB" "02EXOBSB" "03LEVBSB" "04NUMBSB" "05DEUBSB"
-    "06JOSBSB" "07JDGBSB" "08RUTBSB" "091SABSB" "102SABSB"
-    "111KIBSB" "122KIBSB" "131CHBSB" "142CHBSB" "15EZRBSB"
-    "16NEHBSB" "17ESTBSB" "18JOBBSB" "19PSABSB" "20PROBSB"
-    "21ECCBSB" "22SNGBSB" "23ISABSB" "24JERBSB" "25LAMBSB"
-    "26EZKBSB" "27DANBSB" "28HOSBSB" "29JOLBSB" "30AMOBSB"
-    "31OBABSB" "32JONBSB" "33MICBSB" "34NAMBSB" "35HABBSB"
-    "36ZEPBSB" "37HAGBSB" "38ZECBSB" "39MALBSB"
-    "41MATBSB" "42MRKBSB" "43LUKBSB" "44JHNBSB" "45ACTBSB"
-    "46ROMBSB" "471COBSB" "482COBSB" "49GALBSB" "50EPHBSB"
-    "51PHPBSB" "52COLBSB" "531THBSB" "542THBSB" "551TIBSB"
-    "562TIBSB" "57TITBSB" "58PHMBSB" "59HEBBSB" "60JASBSB"
-    "611PEBSB" "622PEBSB" "631JNBSB" "642JNBSB" "653JNBSB"
-    "66JUDBSB" "67REVBSB"
-)
-
-# Plain USJ files use short book codes
-PLAIN_BOOKS=(
-    "GEN" "EXO" "LEV" "NUM" "DEU"
-    "JOS" "JDG" "RUT" "1SA" "2SA"
-    "1KI" "2KI" "1CH" "2CH" "EZR"
-    "NEH" "EST" "JOB" "PSA" "PRO"
-    "ECC" "SNG" "ISA" "JER" "LAM"
-    "EZK" "DAN" "HOS" "JOL" "AMO"
-    "OBA" "JON" "MIC" "NAM" "HAB"
-    "ZEP" "HAG" "ZEC" "MAL"
-    "MAT" "MRK" "LUK" "JHN" "ACT"
-    "ROM" "1CO" "2CO" "GAL" "EPH"
-    "PHP" "COL" "1TH" "2TH" "1TI"
-    "2TI" "TIT" "PHM" "HEB" "JAS"
-    "1PE" "2PE" "1JN" "2JN" "3JN"
-    "JUD" "REV"
-)
-
 # OT books in OSHB naming convention
 OSHB_BOOKS=(
     "Gen" "Exod" "Lev" "Num" "Deut"
@@ -168,54 +132,96 @@ OSHB_BOOKS=(
 
 # ============================================================================
 # 1. Fetch BSB-USJ data (CC0)
+#
+# Upstream restructured in 2026 — USJ files are no longer served as raw files
+# under main/results_usj/. They are now packaged as zips on GitHub releases.
+# We download the BSB_usj.zip (plain) and BSB_full_strongs_usj.zip (with
+# Strong's) assets from the latest release and extract them into the same
+# layout that previously existed under sources/bsb-usj/results_usj/.
 # ============================================================================
 echo "--- Fetching BSB-USJ data (CC0) ---"
 
-# 1a. Download strongs_full USJ files (with Strong's numbers)
+USJ_RELEASE_TAG_FILE="$SOURCES_DIR/bsb-usj/.release_tag"
+USJ_RELEASES_BASE="https://github.com/BSB-publishing/bsb2usfm/releases"
+
+# Resolve the latest release tag once (avoids hitting GitHub API rate limits
+# more than necessary). Fall back to "latest" if the lookup fails.
+USJ_LATEST_TAG=$(curl -sI "$USJ_RELEASES_BASE/latest" 2>/dev/null \
+    | grep -i '^location:' | sed 's|.*/tag/||' | tr -d '\r\n')
+if [ -z "$USJ_LATEST_TAG" ]; then
+    USJ_LATEST_TAG="latest"
+    USJ_DOWNLOAD_PREFIX="$USJ_RELEASES_BASE/latest/download"
+else
+    USJ_DOWNLOAD_PREFIX="$USJ_RELEASES_BASE/download/$USJ_LATEST_TAG"
+fi
+
+# Determine the previously-fetched tag (if any) for skip logic
+USJ_CACHED_TAG=""
+if [ -f "$USJ_RELEASE_TAG_FILE" ]; then
+    USJ_CACHED_TAG=$(cat "$USJ_RELEASE_TAG_FILE" 2>/dev/null | tr -d '\r\n')
+fi
+
+# fetch_and_extract_usj_zip <asset_name> <dest_dir> <description>
+# Downloads the named zip asset from the resolved release and unzips it into
+# dest_dir, overwriting existing files. Returns 0 if extraction happened, 1 if
+# skipped.
+fetch_and_extract_usj_zip() {
+    local asset="$1"
+    local dest_dir="$2"
+    local desc="$3"
+
+    if [ "$FORCE" != true ] \
+       && [ -n "$USJ_CACHED_TAG" ] \
+       && [ "$USJ_CACHED_TAG" = "$USJ_LATEST_TAG" ] \
+       && [ -d "$dest_dir" ] \
+       && [ "$(ls -1 "$dest_dir"/*.usj 2>/dev/null | wc -l | tr -d ' ')" -gt 0 ]; then
+        echo "  $desc up to date (release $USJ_CACHED_TAG)"
+        return 1
+    fi
+
+    local url="$USJ_DOWNLOAD_PREFIX/$asset"
+    local tmp_zip
+    tmp_zip=$(mktemp -t bsb-usj-XXXXXX.zip)
+
+    echo "  Downloading $desc ($asset @ $USJ_LATEST_TAG)..."
+    if ! curl -fL --retry 3 --retry-delay 2 "$url" -o "$tmp_zip"; then
+        echo "    Warning: Failed to download $asset from $url"
+        rm -f "$tmp_zip"
+        return 1
+    fi
+
+    mkdir -p "$dest_dir"
+    if ! unzip -q -o "$tmp_zip" -d "$dest_dir"; then
+        echo "    Warning: Failed to extract $asset"
+        rm -f "$tmp_zip"
+        return 1
+    fi
+    rm -f "$tmp_zip"
+    return 0
+}
+
+# 1a. strongs_full USJ files (with Strong's numbers)
 USJ_STRONGS_DIR="$SOURCES_DIR/bsb-usj/results_usj/strongs_full"
-mkdir -p "$USJ_STRONGS_DIR"
-
-STRONGS_COUNT=0
-STRONGS_DOWNLOADED=0
-BASE_URL="https://raw.githubusercontent.com/BSB-publishing/bsb2usfm/main/results_usj/strongs_full"
-
-for BOOK in "${BOOKS[@]}"; do
-    FILE="${BOOK}_full_strongs.usj"
-    if download_file "$BASE_URL/$FILE" "$USJ_STRONGS_DIR/$FILE" "$FILE"; then
-        STRONGS_DOWNLOADED=$((STRONGS_DOWNLOADED + 1))
-    fi
-    STRONGS_COUNT=$((STRONGS_COUNT + 1))
-done
-
+fetch_and_extract_usj_zip \
+    "BSB_full_strongs_usj.zip" \
+    "$USJ_STRONGS_DIR" \
+    "Strong's USJ files" || true
 USJ_COUNT=$(ls -1 "$USJ_STRONGS_DIR"/*.usj 2>/dev/null | wc -l | tr -d ' ')
-if [ "$STRONGS_DOWNLOADED" -gt 0 ]; then
-    echo "Downloaded $STRONGS_DOWNLOADED Strong's USJ files (total: $USJ_COUNT)"
-else
-    echo "Strong's USJ files up to date ($USJ_COUNT files)"
-fi
+echo "Strong's USJ files: $USJ_COUNT"
 
-# 1b. Download plain USJ files (without Strong's numbers - for text extraction)
+# 1b. Plain USJ files (without Strong's numbers — for text extraction)
 USJ_PLAIN_DIR="$SOURCES_DIR/bsb-usj/results_usj/plain"
-mkdir -p "$USJ_PLAIN_DIR"
-
-PLAIN_COUNT=0
-PLAIN_DOWNLOADED=0
-BASE_URL="https://raw.githubusercontent.com/BSB-publishing/bsb2usfm/main/results_usj"
-
-for BOOK in "${PLAIN_BOOKS[@]}"; do
-    FILE="${BOOK}.usj"
-    if download_file "$BASE_URL/$FILE" "$USJ_PLAIN_DIR/$FILE" "$FILE"; then
-        PLAIN_DOWNLOADED=$((PLAIN_DOWNLOADED + 1))
-    fi
-    PLAIN_COUNT=$((PLAIN_COUNT + 1))
-done
-
+fetch_and_extract_usj_zip \
+    "BSB_usj.zip" \
+    "$USJ_PLAIN_DIR" \
+    "Plain USJ files" || true
 USJ_PLAIN_COUNT=$(ls -1 "$USJ_PLAIN_DIR"/*.usj 2>/dev/null | wc -l | tr -d ' ')
-if [ "$PLAIN_DOWNLOADED" -gt 0 ]; then
-    echo "Downloaded $PLAIN_DOWNLOADED plain USJ files (total: $USJ_PLAIN_COUNT)"
-else
-    echo "Plain USJ files up to date ($USJ_PLAIN_COUNT files)"
-fi
+echo "Plain USJ files: $USJ_PLAIN_COUNT"
+
+# Persist the resolved tag so subsequent runs can skip the (large) zip
+# downloads when the upstream release hasn't moved.
+mkdir -p "$SOURCES_DIR/bsb-usj"
+echo "$USJ_LATEST_TAG" > "$USJ_RELEASE_TAG_FILE"
 echo ""
 
 # ============================================================================
