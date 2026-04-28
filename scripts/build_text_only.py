@@ -26,8 +26,32 @@ TEXT_ONLY_DIR = BASE_DIR / "text-only"
 PLAIN_USJ_FILES: dict[str, str] = {code: f"{code}.usj" for code in BOOK_CODES.values()}
 
 
+# USFM/USJ paragraph styles that mark non-body content (section headings,
+# cross-reference rows, descriptive titles, intro material). Their text and
+# any descendant text must be excluded from verse output.
+HEADING_PARA_STYLES = frozenset(
+    {
+        "s", "s1", "s2", "s3", "s4", "s5", "sd", "sp", "sr",
+        "ms", "ms1", "ms2", "ms3",
+        "is", "is1", "is2", "is3",
+        "r", "ior", "mr",
+        "mt", "mt1", "mt2", "mt3", "mt4",
+        "d", "dc",
+        "imt", "imt1", "imt2", "imt3", "imt4",
+        "iot", "io", "io1", "io2", "io3", "io4",
+        "iex", "ie", "iqt",
+    }
+)
+
+
 def extract_verses_from_usj(usj_path: Path) -> dict[int, dict[int, str]]:
     """Extract verses from a plain USJ file using usfmtc.
+
+    Walks the document tree and accumulates verse text from element `text`
+    and `tail` strings, skipping footnote subtrees and section-heading
+    paragraphs. Verse text often spans multiple sibling/descendant nodes
+    (e.g. footnote tail, in-verse paragraph break, words-of-Jesus chars),
+    so a flat root.iter() pass that only reads verse.tail loses content.
 
     Returns: {chapter_num: {verse_num: text}}
     """
@@ -35,30 +59,79 @@ def extract_verses_from_usj(usj_path: Path) -> dict[int, dict[int, str]]:
     root = doc.getroot()
 
     verses: dict[int, dict[int, str]] = {}
-    current_chapter = 0
+    state = {"chapter": 0, "verse": 0}
 
-    for elem in root.iter():
-        if elem.tag == "chapter":
-            current_chapter = int(elem.get("number", 0))
-            if current_chapter not in verses:
-                verses[current_chapter] = {}
-        elif elem.tag == "verse":
-            verse_num_str = elem.get("number", "")
-            # Skip verse ranges like "1-2" and end markers
-            if "-" in verse_num_str or elem.get("eid"):
-                continue
+    def append(text: str | None) -> None:
+        if not text:
+            return
+        stripped = text.strip()
+        if not stripped:
+            return
+        c, v = state["chapter"], state["verse"]
+        if not c or not v:
+            return
+        chapter_dict = verses.setdefault(c, {})
+        existing = chapter_dict.get(v)
+        chapter_dict[v] = f"{existing} {stripped}" if existing else stripped
+
+    def walk(elem, in_note: bool, in_heading: bool) -> None:
+        tag = elem.tag
+
+        if tag == "chapter":
             try:
-                verse_num = int(verse_num_str)
+                state["chapter"] = int(elem.get("number", 0))
             except ValueError:
-                continue
-            # Get the text that follows the verse marker
-            text = elem.tail.strip() if elem.tail else ""
-            if current_chapter and verse_num and text:
-                if verse_num not in verses.get(current_chapter, {}):
-                    verses[current_chapter][verse_num] = text
-                else:
-                    verses[current_chapter][verse_num] += " " + text
+                state["chapter"] = 0
+            state["verse"] = 0
+            verses.setdefault(state["chapter"], {})
+            return  # chapter element has no body text we want
 
+        if tag == "verse":
+            # Skip explicit verse-end milestones
+            if elem.get("eid"):
+                return
+            num_str = elem.get("number", "")
+            if "-" in num_str:
+                # Verse ranges (e.g. "1-2"): keep current verse=0 so range
+                # text isn't attributed to a single verse.
+                state["verse"] = 0
+                return
+            try:
+                state["verse"] = int(num_str)
+            except ValueError:
+                state["verse"] = 0
+            if not in_note and not in_heading:
+                append(elem.tail)
+            return
+
+        if tag == "note":
+            # Footnote: skip subtree text; capture tail (running text resumes).
+            # Notes don't contain verse/chapter milestones, so no need to
+            # descend for state.
+            if not in_note and not in_heading:
+                append(elem.tail)
+            return
+
+        if tag == "para":
+            style = elem.get("style", "")
+            heading = in_heading or style in HEADING_PARA_STYLES
+            if not in_note and not heading:
+                append(elem.text)
+            for child in elem:
+                walk(child, in_note=in_note, in_heading=heading)
+            if not in_note and not heading:
+                append(elem.tail)
+            return
+
+        # char, ref, w, and other inline elements
+        if not in_note and not in_heading:
+            append(elem.text)
+        for child in elem:
+            walk(child, in_note=in_note, in_heading=in_heading)
+        if not in_note and not in_heading:
+            append(elem.tail)
+
+    walk(root, in_note=False, in_heading=False)
     return verses
 
 
