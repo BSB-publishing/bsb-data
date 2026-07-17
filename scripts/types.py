@@ -146,6 +146,20 @@ USJ_FILES: dict[str, str] = {
     "REV": "67REVBSB_full_strongs.usj",
 }
 
+# MSB (Majority Standard Bible) ships as a New Testament-only sibling edition
+# of BSB from the same bsb2usfm source repo - its OT is a byte-identical
+# mirror of BSB's, so we only ever build MSB output for NT books.
+NT_BOOK_CODES: dict[int, str] = {num: code for num, code in BOOK_CODES.items() if num >= 40}
+
+# MSB's USJ filenames follow the exact same naming convention as BSB's, just
+# with the "MSB" edition suffix instead of "BSB" (e.g. "41MATBSB_full_strongs.usj"
+# -> "41MATMSB_full_strongs.usj"), so derive them rather than hand-duplicating.
+USJ_FILES_MSB: dict[str, str] = {
+    code: filename.replace("BSB_full_strongs", "MSB_full_strongs")
+    for code, filename in USJ_FILES.items()
+    if code in NT_BOOK_CODES.values()
+}
+
 
 # Display format - one line per verse in JSONL
 class DisplayVerse(TypedDict, total=False):

@@ -109,7 +109,9 @@ jobs:
       - name: Build all outputs
         if: steps.check.outputs.needs_build == 'true'
         run: |
-          python3 -m scripts.build --all
+          # --msb builds the Majority Standard Bible NT-only sibling edition
+          # (output/msb/) alongside the default BSB --all build.
+          python3 -m scripts.build --all --msb
 
       - name: Prepare output statistics
         if: steps.check.outputs.needs_build == 'true'
@@ -126,6 +128,11 @@ jobs:
 
           CCBY_SIZE=$(du -sh output/base/index-cc-by | cut -f1)
           echo "- Index-CC-BY: $CCBY_SIZE" >> $GITHUB_STEP_SUMMARY
+
+          MSB_DISPLAY_COUNT=$(find output/msb/base/display -name "*.json" | wc -l)
+          MSB_PD_LINES=$(wc -l < output/msb/vector-db/index-pd/bible-index.jsonl)
+          echo "- MSB Display: $MSB_DISPLAY_COUNT NT books" >> $GITHUB_STEP_SUMMARY
+          echo "- MSB Index-PD: $MSB_PD_LINES verses" >> $GITHUB_STEP_SUMMARY
 
       - name: Publish to data repository
         if: steps.check.outputs.needs_build == 'true'
@@ -146,6 +153,7 @@ jobs:
           # Copy new data
           cp -r output/base data-repo/
           cp -r output/schema data-repo/
+          cp -r output/msb data-repo/
           cp output/VERSION.json data-repo/
           cp output/README.md data-repo/
 
@@ -194,7 +202,7 @@ jobs:
         run: |
           # Create zip of the output
           cd data-repo
-          zip -r "../bsb-data-${TAG}.zip" base/ schema/ VERSION.json README.md LICENSE-*.md ATTRIBUTION.md
+          zip -r "../bsb-data-${TAG}.zip" base/ schema/ msb/ VERSION.json README.md LICENSE-*.md ATTRIBUTION.md
           cd ..
 
           # Create release with zip attached (or update if exists)

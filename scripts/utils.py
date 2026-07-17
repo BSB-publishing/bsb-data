@@ -46,6 +46,20 @@ VECTOR_DB_DIR = OUTPUT_DIR / "vector-db"
 INDEX_PD_DIR = VECTOR_DB_DIR / "index-pd"
 INDEX_CC_BY_DIR = VECTOR_DB_DIR / "index-cc-by"
 
+# MSB (Majority Standard Bible) - NT-only sibling edition of BSB. Its OT is a
+# byte-identical mirror of BSB's, so it gets its own edition tree under
+# output/msb/ rather than being interleaved with BSB's book directories.
+USJ_MSB_DIR = SOURCES_DIR / "msb-usj" / "results_usj" / "strongs_full"
+MSB_TABLES_FILE = SOURCES_DIR / "msb-tables" / "msb_nt_tables.tsv"
+
+MSB_OUTPUT_DIR = OUTPUT_DIR / "msb"
+MSB_BASE_DIR = MSB_OUTPUT_DIR / "base"
+MSB_DISPLAY_DIR = MSB_BASE_DIR / "display"
+MSB_INDEX_CC_BY_SPLIT_DIR = MSB_BASE_DIR / "index-cc-by"
+MSB_VECTOR_DB_DIR = MSB_OUTPUT_DIR / "vector-db"
+MSB_INDEX_PD_DIR = MSB_VECTOR_DB_DIR / "index-pd"
+MSB_INDEX_CC_BY_DIR = MSB_VECTOR_DB_DIR / "index-cc-by"
+
 
 def ensure_dir(path: Path) -> None:
     """Ensure a directory exists, creating it if necessary."""

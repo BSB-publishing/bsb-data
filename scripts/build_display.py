@@ -11,15 +11,22 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
+from .build_headings import build_headings
+from .build_paragraphs import build_paragraphs
 from .convert_usj import parse_usj_file
-from .types import BOOK_CODES, BuildStats
+from .types import BOOK_CODES, NT_BOOK_CODES, BuildStats
 from .utils import (
+    BASE_DIR,
     BSB_TABLES_FILE,
     DISPLAY_DIR,
+    MSB_DISPLAY_DIR,
+    MSB_TABLES_FILE,
     USJ_DIR,
+    USJ_MSB_DIR,
     ensure_dir,
     format_file_size,
     log,
+    read_jsonl,
     write_json,
 )
 
@@ -205,27 +212,31 @@ def parse_verse_id(verse_id: str) -> tuple[str, int, int] | None:
         return None
 
 
-def load_usj_data() -> dict:
+def load_usj_data(
+    usj_dir: Path = USJ_DIR,
+    edition: str = "BSB",
+    book_codes: dict[int, str] = BOOK_CODES,
+) -> dict:
     """Load English text from USJ files.
 
     Returns a nested dict: {book: {chapter: {verse: [[text, strongs], ...]}}}
     """
-    log("Loading USJ data for English text...")
+    log(f"Loading USJ data for {edition} English text...")
 
-    if not USJ_DIR.exists():
-        log(f"ERROR: USJ directory not found: {USJ_DIR}")
+    if not usj_dir.exists():
+        log(f"ERROR: USJ directory not found: {usj_dir}")
         log("  Run: bash scripts/fetch-sources.sh")
         sys.exit(1)
 
     # Structure: {book: {chapter: {verse: [[text, strongs], ...]}}}
     data: dict = defaultdict(lambda: defaultdict(dict))
 
-    for book_num, book_code in BOOK_CODES.items():
+    for book_num, book_code in book_codes.items():
         prefix = USJ_FILE_PREFIX.get(book_num)
         if not prefix:
             continue
 
-        usj_file = USJ_DIR / f"{prefix}BSB_full_strongs.usj"
+        usj_file = usj_dir / f"{prefix}{edition}_full_strongs.usj"
         if not usj_file.exists():
             log(f"  WARNING: USJ file not found: {usj_file}")
             continue
@@ -249,15 +260,15 @@ def load_usj_data() -> dict:
     return data
 
 
-def load_tsv_original_language_data() -> dict:
+def load_tsv_original_language_data(tables_file: Path = BSB_TABLES_FILE) -> dict:
     """Load Hebrew/Greek text from TSV file.
 
     Returns a nested dict: {book: {chapter: {verse: {"orig": [[text, strongs], ...], "lang": "heb"|"grk"}}}}
     """
-    log("Loading TSV data for Hebrew/Greek text...")
+    log(f"Loading TSV data for Hebrew/Greek text from {tables_file.name}...")
 
-    if not BSB_TABLES_FILE.exists():
-        log(f"ERROR: BSB tables file not found: {BSB_TABLES_FILE}")
+    if not tables_file.exists():
+        log(f"ERROR: tables file not found: {tables_file}")
         log("  Run: bash scripts/fetch-sources.sh")
         sys.exit(1)
 
@@ -271,7 +282,7 @@ def load_tsv_original_language_data() -> dict:
         lambda: defaultdict(lambda: defaultdict(lambda: {"orig": {}, "lang": "heb"}))
     )
 
-    with open(BSB_TABLES_FILE, encoding="utf-8") as f:
+    with open(tables_file, encoding="utf-8") as f:
         reader = csv.reader(f, delimiter="\t")
         next(reader)  # Skip header
 
@@ -332,28 +343,67 @@ def load_tsv_original_language_data() -> dict:
     return data
 
 
-def build_display() -> BuildStats:
+def load_verse_structure() -> dict[str, dict]:
+    """Load per-verse paragraph/poetry breaks and section headings, keyed by
+    "BOOK.CHAPTER.VERSE", so display output can be self-sufficient for
+    reconstructing BSB's original paragraph/stanza layout and sub-headings
+    without a separate join against headings.jsonl/paragraphs.jsonl.
+
+    BSB-only: headings.jsonl/paragraphs.jsonl are currently generated from
+    the BSB USJ source only, so this isn't called for the MSB display build.
+    """
+    build_headings()
+    build_paragraphs()
+
+    structure: dict[str, dict] = {}
+
+    for heading in read_jsonl(BASE_DIR / "headings.jsonl"):
+        verse_id = f"{heading['b']}.{heading['c']}.{heading['before_v']}"
+        entry = structure.setdefault(verse_id, {})
+        entry.setdefault("headings", []).append(
+            {"level": heading["level"], "text": heading["text"]}
+        )
+
+    for para_break in read_jsonl(BASE_DIR / "paragraphs.jsonl"):
+        verse_id = f"{para_break['b']}.{para_break['c']}.{para_break['before_v']}"
+        entry = structure.setdefault(verse_id, {})
+        entry.setdefault("para", []).append(para_break["marker"])
+
+    return structure
+
+
+def build_display(
+    usj_dir: Path = USJ_DIR,
+    tables_file: Path = BSB_TABLES_FILE,
+    output_dir: Path = DISPLAY_DIR,
+    edition: str = "BSB",
+    book_codes: dict[int, str] = BOOK_CODES,
+) -> BuildStats:
     """Build display output files."""
-    log("Building display output...")
+    log(f"Building {edition} display output...")
 
     # Load ENG data from USJ
-    usj_data = load_usj_data()
+    usj_data = load_usj_data(usj_dir, edition, book_codes)
+
+    # Load per-verse paragraph/heading structure (BSB-only for now - see
+    # load_verse_structure() docstring)
+    verse_structure = load_verse_structure() if edition == "BSB" else {}
 
     # Load HEB/GRK data from TSV
-    tsv_data = load_tsv_original_language_data()
+    tsv_data = load_tsv_original_language_data(tables_file)
 
     if not usj_data:
         log("ERROR: No data loaded from USJ")
         sys.exit(1)
 
     # Ensure output directory exists
-    ensure_dir(DISPLAY_DIR)
+    ensure_dir(output_dir)
 
     stats = BuildStats()
-    total_books = len(BOOK_CODES)
+    total_books = len(book_codes)
     files_written = 0
 
-    for book_num, book_code in BOOK_CODES.items():
+    for book_num, book_code in book_codes.items():
         log(f"Processing {book_code} ({book_num}/{total_books})")
 
         if book_code not in usj_data:
@@ -365,7 +415,7 @@ def build_display() -> BuildStats:
         stats.books_processed += 1
 
         # Create book directory
-        book_dir = DISPLAY_DIR / book_code
+        book_dir = output_dir / book_code
         ensure_dir(book_dir)
 
         # Get all chapters from USJ (primary source for chapters)
@@ -378,6 +428,7 @@ def build_display() -> BuildStats:
             # Build chapter output structure
             eng_output = {}
             orig_output = {}
+            structure_output = {}
 
             # Determine language from TSV data (heb or grk)
             lang_key = "heb"  # Default for OT
@@ -412,12 +463,21 @@ def build_display() -> BuildStats:
                     if orig_words:
                         orig_output[str(verse)] = orig_words
 
+                # Section headings and paragraph/stanza breaks that occur
+                # immediately before this verse, so display is self-sufficient
+                # for reconstructing BSB's original layout.
+                verse_id = f"{book_code}.{chapter}.{verse}"
+                if verse_id in verse_structure:
+                    structure_output[str(verse)] = verse_structure[verse_id]
+
             if eng_output:
                 # Build final chapter JSON
                 chapter_output = {
                     "eng": eng_output,
                     lang_key: orig_output,
                 }
+                if structure_output:
+                    chapter_output["structure"] = structure_output
 
                 # Write chapter file as compact JSON
                 output_path = book_dir / f"{book_code}{chapter}.json"
@@ -429,12 +489,12 @@ def build_display() -> BuildStats:
     # Write stats
     stats_dict = stats.to_dict()
     stats_dict["files_written"] = files_written
-    stats_path = DISPLAY_DIR / "stats.json"
+    stats_path = output_dir / "stats.json"
     write_json(stats_path, stats_dict)
 
     # Log summary
     log("")
-    log("=== Display Build Complete ===")
+    log(f"=== {edition} Display Build Complete ===")
     log(f"Books processed: {stats.books_processed}")
     log(f"Total verses: {stats.total_verses}")
     log(f"Total words: {stats.total_words}")
@@ -443,10 +503,26 @@ def build_display() -> BuildStats:
     log(f"Chapter files written: {files_written}")
 
     # Calculate total output size
-    total_size = sum(f.stat().st_size for f in DISPLAY_DIR.rglob("*.json"))
+    total_size = sum(f.stat().st_size for f in output_dir.rglob("*.json"))
     log(f"Total output size: {format_file_size(total_size)}")
 
     return stats
+
+
+def build_display_msb() -> BuildStats:
+    """Build MSB (Majority Standard Bible) display output - NT books only.
+
+    MSB's OT is a byte-identical mirror of BSB's, so only NT books get a
+    distinct MSB build; consumers wanting MSB-edition OT text should just
+    use BSB's OT output directly.
+    """
+    return build_display(
+        usj_dir=USJ_MSB_DIR,
+        tables_file=MSB_TABLES_FILE,
+        output_dir=MSB_DISPLAY_DIR,
+        edition="MSB",
+        book_codes=NT_BOOK_CODES,
+    )
 
 
 def main() -> None:

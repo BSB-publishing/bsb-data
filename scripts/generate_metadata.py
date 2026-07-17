@@ -114,7 +114,8 @@ cross-references, topics, and morphology.
 │   ├── concordance/         # Strong's to verse mapping
 │   │   ├── strongs-to-verses.json
 │   │   └── strongs-to-verses.jsonl
-│   └── headings.jsonl       # Section headings index
+│   ├── headings.jsonl       # Section headings index
+│   └── paragraphs.jsonl     # Paragraph/poetry/list break index
 ├── vector-db/               # Vector DB index files
 │   ├── index-pd/            # Vector DB index (Public Domain)
 │   │   └── bible-index.jsonl
@@ -123,6 +124,7 @@ cross-references, topics, and morphology.
 ├── schema/                  # JSON schemas for all formats
 │   ├── display.schema.json
 │   ├── headings.schema.json
+│   ├── paragraphs.schema.json
 │   ├── book-codes.schema.json
 │   └── vector-db/
 │       ├── index-pd.schema.json
@@ -162,6 +164,12 @@ Compact format with English and original language (Hebrew/Greek) text. Each line
 For NT books, `grk` is used instead of `heb`:
 ```json
 {"eng":{1:[["[This is the] record","G976"],["of [the] genealogy","G1078"],...]},"grk":{1:[["Βίβλος","G976"],["γενέσεως","G1078"],...]}}
+```
+
+Verses that begin a new section heading or paragraph/poetry/list break carry a `structure` field (BSB edition only), keyed by verse number, so display is self-sufficient for reconstructing BSB's original layout without a separate join against `headings.jsonl`/`paragraphs.jsonl`:
+
+```json
+{"eng":{...},"heb":{...},"structure":{"6":{"headings":[{"level":"s2","text":"The Second Day"}],"para":["pmo"]}}}
 ```
 
 ### Index Format (`vector-db/index-pd/bible-index.jsonl`)

@@ -10,10 +10,12 @@ from .convert_usj import parse_usj_file
 from .enrich_gloss import enrich_with_glosses, load_strongs_lexicon
 from .enrich_topics import enrich_with_topics, load_topics
 from .enrich_xrefs import enrich_with_xrefs, load_cross_references
-from .types import BOOK_CODES, USJ_FILES, BuildStats, IndexVersePD
+from .types import BOOK_CODES, NT_BOOK_CODES, USJ_FILES, USJ_FILES_MSB, BuildStats, IndexVersePD
 from .utils import (
     INDEX_PD_DIR,
+    MSB_INDEX_PD_DIR,
     USJ_DIR,
+    USJ_MSB_DIR,
     check_sources_exist,
     ensure_dir,
     extract_strongs_from_words,
@@ -27,9 +29,15 @@ from .utils import (
 )
 
 
-def build_index_pd() -> BuildStats:
+def build_index_pd(
+    usj_dir: Path = USJ_DIR,
+    usj_files: dict[str, str] = USJ_FILES,
+    output_dir: Path = INDEX_PD_DIR,
+    book_codes: dict[int, str] = BOOK_CODES,
+    edition: str = "BSB",
+) -> BuildStats:
     """Build Public Domain index output."""
-    log("Building PD index output...")
+    log(f"Building {edition} PD index output...")
 
     # Check sources exist
     exists, missing = check_sources_exist()
@@ -40,9 +48,11 @@ def build_index_pd() -> BuildStats:
         sys.exit(1)
 
     # Ensure output directory exists
-    ensure_dir(INDEX_PD_DIR)
+    ensure_dir(output_dir)
 
-    # Build headings index first (returns verse-to-heading mapping)
+    # Build headings index first (returns verse-to-heading mapping). Headings
+    # are structural (section breaks keyed by verse id), not translation
+    # text, so BSB's headings are reused as-is for MSB too.
     log("")
     verse_to_headings = build_headings()
 
@@ -58,18 +68,18 @@ def build_index_pd() -> BuildStats:
 
     stats = BuildStats()
     all_verses: list[IndexVersePD] = []
-    total_books = len(BOOK_CODES)
+    total_books = len(book_codes)
 
-    for book_num, book_code in BOOK_CODES.items():
+    for book_num, book_code in book_codes.items():
         log_book_progress(book_num, total_books, book_code)
 
         # Get USJ file path
-        usj_filename = USJ_FILES.get(book_code)
+        usj_filename = usj_files.get(book_code)
         if not usj_filename:
             log(f"  WARNING: No USJ file mapping for {book_code}")
             continue
 
-        usj_path = USJ_DIR / usj_filename
+        usj_path = usj_dir / usj_filename
         if not usj_path.exists():
             log(f"  WARNING: USJ file not found: {usj_path}")
             continue
@@ -139,16 +149,16 @@ def build_index_pd() -> BuildStats:
     # Write output
     log("")
     log("Writing output...")
-    output_path = INDEX_PD_DIR / "bible-index.jsonl"
+    output_path = output_dir / "bible-index.jsonl"
     write_jsonl(output_path, all_verses)
 
     # Write stats
-    stats_path = INDEX_PD_DIR / "stats.json"
+    stats_path = output_dir / "stats.json"
     write_json(stats_path, stats.to_dict())
 
     # Log summary
     log("")
-    log("=== PD Index Build Complete ===")
+    log(f"=== {edition} PD Index Build Complete ===")
     log(f"Books processed: {stats.books_processed}")
     log(f"Total verses: {stats.total_verses}")
     log(f"Total words: {stats.total_words}")
@@ -162,6 +172,22 @@ def build_index_pd() -> BuildStats:
     log(f"Output size: {format_file_size(output_size)}")
 
     return stats
+
+
+def build_index_pd_msb() -> BuildStats:
+    """Build MSB (Majority Standard Bible) PD index output - NT books only.
+
+    MSB's OT is a byte-identical mirror of BSB's, so only NT books get a
+    distinct MSB build; consumers wanting MSB-edition OT text should just
+    use BSB's OT output directly.
+    """
+    return build_index_pd(
+        usj_dir=USJ_MSB_DIR,
+        usj_files=USJ_FILES_MSB,
+        output_dir=MSB_INDEX_PD_DIR,
+        book_codes=NT_BOOK_CODES,
+        edition="MSB",
+    )
 
 
 def main() -> None:

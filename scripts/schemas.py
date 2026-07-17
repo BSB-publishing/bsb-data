@@ -25,10 +25,17 @@ WORD_ARRAY_SCHEMA = {
     "additionalProperties": False,
 }
 
-# English word array can additionally carry an elided (zero-surface-form) word:
-# a Strong's-tagged word with no surface form in the English translation (e.g.
-# Hebrew's untranslatable direct-object marker). `text` is always "" for these,
-# so concatenating `w[0]` across the array is always display-safe.
+# English word array can additionally carry:
+# - an elided (zero-surface-form) word: a Strong's-tagged word with no surface
+#   form in the English translation (e.g. Hebrew's untranslatable direct-object
+#   marker, or a discontinuous/repeated original-language word already covered
+#   by a nearby English word - "reason": "ellipsis" - or a known upstream data
+#   defect - "reason": "defect"). `text` is always "" for these.
+# - a supplied word: translator-added text (e.g. an implied "was"/"He") that
+#   bsb2usfm bakes into the word's text as literal [brackets]/{braces}; those
+#   characters are stripped and the entry flagged instead, so `text` still
+#   carries real (bracket-free) words.
+# Concatenating `w[0]` across the array is always display-safe either way.
 ENG_WORD_ARRAY_SCHEMA = {
     "type": "object",
     "description": "Verse number mapped to word entries array",
@@ -36,8 +43,9 @@ ENG_WORD_ARRAY_SCHEMA = {
         "^\\d+$": {
             "type": "array",
             "description": (
-                'Word entries: [text, strongs|null] normally, or '
-                '[text, strongs, {"elided": true}] for an elided word (text is always "")'
+                'Word entries: [text, strongs|null] normally, or a third metadata '
+                'object for {"elided": true[, "reason"]}, {"supplied": true}, or '
+                '{"defect": true}'
             ),
             "items": {
                 "type": "array",
@@ -46,7 +54,7 @@ ENG_WORD_ARRAY_SCHEMA = {
                 "items": [
                     {
                         "type": "string",
-                        "description": 'Text content; always "" when the third element marks the entry as elided',
+                        "description": 'Text content; always "" when flagged "elided"',
                     },
                     {
                         "type": ["string", "null"],
@@ -55,13 +63,93 @@ ENG_WORD_ARRAY_SCHEMA = {
                     },
                     {
                         "type": "object",
-                        "description": "Present only for elided (zero-surface-form) words",
-                        "required": ["elided"],
-                        "properties": {"elided": {"const": True}},
-                        "additionalProperties": False,
+                        "description": "Present only when this word entry has metadata",
+                        "oneOf": [
+                            {
+                                "required": ["elided"],
+                                "properties": {
+                                    "elided": {"const": True},
+                                    "reason": {
+                                        "type": "string",
+                                        "enum": ["ellipsis", "defect"],
+                                        "description": (
+                                            "Omitted for plain grammatical elision (e.g. Hebrew's "
+                                            "direct-object marker); 'ellipsis' for a discontinuous/"
+                                            "repeated original-language word; 'defect' for a known "
+                                            "upstream data-quality placeholder"
+                                        ),
+                                    },
+                                },
+                                "additionalProperties": False,
+                            },
+                            {
+                                "required": ["supplied"],
+                                "properties": {"supplied": {"const": True}},
+                                "additionalProperties": False,
+                            },
+                            {
+                                "required": ["defect"],
+                                "properties": {
+                                    "defect": {
+                                        "const": True,
+                                        "description": (
+                                            "A known upstream data-quality placeholder token "
+                                            "was removed from this entry, but real text remains "
+                                            "(unlike the elided+defect case, where the token was "
+                                            "the entry's only content)"
+                                        ),
+                                    }
+                                },
+                                "additionalProperties": False,
+                            },
+                        ],
                     },
                 ],
             },
+        }
+    },
+    "additionalProperties": False,
+}
+
+STRUCTURE_SCHEMA = {
+    "type": "object",
+    "description": (
+        "Verse number mapped to section headings and paragraph/poetry/list "
+        "breaks that occur immediately before that verse (BSB only - not "
+        "present in the MSB edition tree). Most verses aren't keys here "
+        "since they continue the current paragraph."
+    ),
+    "patternProperties": {
+        "^\\d+$": {
+            "type": "object",
+            "properties": {
+                "headings": {
+                    "type": "array",
+                    "description": "Section headings/references, in document order",
+                    "items": {
+                        "type": "object",
+                        "required": ["level", "text"],
+                        "properties": {
+                            "level": {
+                                "type": "string",
+                                "description": "Heading level: s1/s2/.../r/d/... (see headings.jsonl)",
+                            },
+                            "text": {"type": "string"},
+                        },
+                        "additionalProperties": False,
+                    },
+                },
+                "para": {
+                    "type": "array",
+                    "description": (
+                        "USJ paragraph/poetry/list style markers that begin here, in "
+                        "document order (e.g. \"p\", \"pmo\", \"b\" for a stanza break, "
+                        '"q1"/"q2" for poetry indent levels; see paragraphs.jsonl)'
+                    ),
+                    "items": {"type": "string"},
+                },
+            },
+            "additionalProperties": False,
         }
     },
     "additionalProperties": False,
@@ -87,6 +175,7 @@ DISPLAY_SCHEMA = {
             **WORD_ARRAY_SCHEMA,
             "description": "Greek text in Greek word order (NT only)",
         },
+        "structure": STRUCTURE_SCHEMA,
     },
     "additionalProperties": False,
     "examples": [
@@ -97,7 +186,13 @@ DISPLAY_SCHEMA = {
                     ["God", "H430"],
                     ["", "H853", {"elided": True}],
                     ["created", "H1254"],
-                ]
+                ],
+                4: [
+                    ["God", "H430"],
+                    ["saw", "H7200"],
+                    ["the light", "H216"],
+                    ["was good", "H2896", {"supplied": True}],
+                ],
             },
             "heb": {1: [["בְּרֵאשִׁ֖ית", "H7225"], ["בָּרָ֣א", "H1254"], ["אֱלֹהִ֑ים", "H430"]]},
         }
@@ -235,6 +330,65 @@ HEADINGS_SCHEMA = {
             "description": "Scripture references (for 'r' type headings)",
             "items": {"type": "string"},
             "examples": [["JHN 1:1-5", "HEB 11:1-3"]],
+        },
+    },
+    "additionalProperties": True,
+}
+
+# Paragraph structure schema
+PARAGRAPHS_SCHEMA = {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://github.com/bsb-data/schema/paragraphs.schema.json",
+    "title": "BSB Paragraph Break",
+    "description": (
+        "A paragraph/poetry/list style break with a verse anchor, so consumers "
+        "can reconstruct BSB's original paragraph and stanza layout on top of "
+        "the flat per-verse display/index output. Headings (s1/s2/r/d/...) are "
+        "in headings.jsonl instead."
+    ),
+    "type": "object",
+    "required": ["id", "b", "c", "before_v", "marker"],
+    "properties": {
+        "id": {
+            "type": "string",
+            "description": "Unique break ID",
+            "pattern": "^[A-Z0-9]{3}\\.[a-z0-9]+\\.\\d+$",
+            "examples": ["GEN.p.1", "GEN.q1.3", "GEN.b.1"],
+        },
+        "b": {
+            "type": "string",
+            "description": "Book code (3-letter identifier)",
+            "pattern": "^[A-Z0-9]{3}$",
+        },
+        "c": {"type": "integer", "description": "Chapter number", "minimum": 1},
+        "before_v": {
+            "type": "integer",
+            "description": "Verse number that follows this break",
+            "minimum": 1,
+        },
+        "marker": {
+            "type": "string",
+            "description": "USJ paragraph/poetry/list style marker",
+            "enum": [
+                "p",
+                "pmo",
+                "m",
+                "mi",
+                "nb",
+                "b",
+                "q1",
+                "q2",
+                "q3",
+                "q4",
+                "qr",
+                "qa",
+                "qc",
+                "li1",
+                "li2",
+                "li3",
+                "li4",
+                "pc",
+            ],
         },
     },
     "additionalProperties": True,
@@ -487,6 +641,7 @@ def get_all_schemas() -> dict[str, dict]:
         "vector-db/index-pd.schema.json": INDEX_PD_SCHEMA,
         "vector-db/index-cc-by.schema.json": INDEX_CC_BY_SCHEMA,
         "headings.schema.json": HEADINGS_SCHEMA,
+        "paragraphs.schema.json": PARAGRAPHS_SCHEMA,
         "book-codes.schema.json": BOOK_CODES_SCHEMA,
         "proper-names.schema.json": PROPER_NAMES_SCHEMA,
         "versification.schema.json": VERSIFICATION_SCHEMA,

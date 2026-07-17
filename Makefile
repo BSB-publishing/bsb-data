@@ -11,7 +11,8 @@ USJ_BUILDERS := --display --index-cc-by --index-cc-by-split --helloao --text-onl
         display index-pd index-cc-by index-cc-by-split helloao text-only \
         concordance english-concordance geography proper-names versification lexicon \
         greek-tsv hebrew-tsv lang-tsv \
-        refresh-from-usj clean-output
+        refresh-from-usj clean-output \
+        msb display-msb index-pd-msb index-cc-by-msb index-cc-by-split-msb
 
 help:
 	@echo "Source data:"
@@ -42,6 +43,13 @@ help:
 	@echo "Composite:"
 	@echo "  make refresh-from-usj   fetch + rebuild all USJ-dependent outputs"
 	@echo "                          ($(USJ_BUILDERS))"
+	@echo ""
+	@echo "MSB (Majority Standard Bible, NT-only sibling edition of BSB):"
+	@echo "  make msb                Build all MSB outputs (display, index-pd, index-cc-by(-split))"
+	@echo "  make display-msb        MSB per-chapter JSON for web display"
+	@echo "  make index-pd-msb       MSB public-domain index"
+	@echo "  make index-cc-by-msb    MSB CC-BY index (single file)"
+	@echo "  make index-cc-by-split-msb  MSB CC-BY index (per-chapter)"
 
 fetch:
 	bash scripts/fetch-sources.sh
@@ -102,3 +110,18 @@ lang-tsv: greek-tsv hebrew-tsv
 # Fetch a fresh BSB-USJ release and rebuild every output that depends on it.
 refresh-from-usj: fetch
 	$(BUILD) $(USJ_BUILDERS)
+
+msb:
+	$(BUILD) --msb
+
+display-msb:
+	$(BUILD) --display-msb
+
+index-pd-msb:
+	$(BUILD) --index-pd-msb
+
+index-cc-by-msb:
+	$(BUILD) --index-cc-by-msb
+
+index-cc-by-split-msb:
+	$(BUILD) --index-cc-by-split-msb

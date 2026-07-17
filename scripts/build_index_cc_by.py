@@ -15,10 +15,12 @@ from .enrich_topics import enrich_with_topics, load_topics
 from .enrich_ubs import enrich_with_ubs, load_ubs_lexicon
 from .enrich_ubs_refs import enrich_with_sense_data, load_ubs_sense_index
 from .enrich_xrefs import enrich_with_xrefs, load_cross_references
-from .types import BOOK_CODES, USJ_FILES, BuildStats, IndexVerseCCBY
+from .types import BOOK_CODES, NT_BOOK_CODES, USJ_FILES, USJ_FILES_MSB, BuildStats, IndexVerseCCBY
 from .utils import (
     INDEX_CC_BY_DIR,
+    MSB_INDEX_CC_BY_DIR,
     USJ_DIR,
+    USJ_MSB_DIR,
     check_oshb_exists,
     check_sources_exist,
     ensure_dir,
@@ -33,9 +35,15 @@ from .utils import (
 )
 
 
-def build_index_cc_by() -> BuildStats:
+def build_index_cc_by(
+    usj_dir: Path = USJ_DIR,
+    usj_files: dict[str, str] = USJ_FILES,
+    output_dir: Path = INDEX_CC_BY_DIR,
+    book_codes: dict[int, str] = BOOK_CODES,
+    edition: str = "BSB",
+) -> BuildStats:
     """Build CC-BY index output with morphology."""
-    log("Building CC-BY index output...")
+    log(f"Building {edition} CC-BY index output...")
 
     # Check sources exist
     exists, missing = check_sources_exist()
@@ -51,9 +59,11 @@ def build_index_cc_by() -> BuildStats:
         log("  Run: python scripts/fetch_sources.py")
 
     # Ensure output directory exists
-    ensure_dir(INDEX_CC_BY_DIR)
+    ensure_dir(output_dir)
 
-    # Build headings index first (returns verse-to-heading mapping)
+    # Build headings index first (returns verse-to-heading mapping). Headings
+    # are structural (section breaks keyed by verse id), not translation
+    # text, so BSB's headings are reused as-is for MSB too.
     log("")
     verse_to_headings = build_headings()
 
@@ -74,19 +84,19 @@ def build_index_cc_by() -> BuildStats:
 
     stats = BuildStats()
     all_verses: list[IndexVerseCCBY] = []
-    total_books = len(BOOK_CODES)
+    total_books = len(book_codes)
     verses_with_morph = 0
 
-    for book_num, book_code in BOOK_CODES.items():
+    for book_num, book_code in book_codes.items():
         log_book_progress(book_num, total_books, book_code)
 
         # Get USJ file path
-        usj_filename = USJ_FILES.get(book_code)
+        usj_filename = usj_files.get(book_code)
         if not usj_filename:
             log(f"  WARNING: No USJ file mapping for {book_code}")
             continue
 
-        usj_path = USJ_DIR / usj_filename
+        usj_path = usj_dir / usj_filename
         if not usj_path.exists():
             log(f"  WARNING: USJ file not found: {usj_path}")
             continue
@@ -189,7 +199,7 @@ def build_index_cc_by() -> BuildStats:
     # Write output
     log("")
     log("Writing output...")
-    output_path = INDEX_CC_BY_DIR / "bible-index.jsonl"
+    output_path = output_dir / "bible-index.jsonl"
     write_jsonl(output_path, all_verses)
 
     # Write stats with all enrichment info
@@ -199,12 +209,12 @@ def build_index_cc_by() -> BuildStats:
     stats_dict["verses_with_images"] = verses_with_images
     stats_dict["verses_with_maps"] = verses_with_maps
     stats_dict["verses_with_parallels"] = verses_with_parallels
-    stats_path = INDEX_CC_BY_DIR / "stats.json"
+    stats_path = output_dir / "stats.json"
     write_json(stats_path, stats_dict)
 
     # Log summary
     log("")
-    log("=== CC-BY Index Build Complete ===")
+    log(f"=== {edition} CC-BY Index Build Complete ===")
     log(f"Books processed: {stats.books_processed}")
     log(f"Total verses: {stats.total_verses}")
     log(f"Total words: {stats.total_words}")
@@ -229,6 +239,22 @@ def build_index_cc_by() -> BuildStats:
     log("      See ATTRIBUTION.md for required attribution.")
 
     return stats
+
+
+def build_index_cc_by_msb() -> BuildStats:
+    """Build MSB (Majority Standard Bible) CC-BY index output - NT books only.
+
+    MSB's OT is a byte-identical mirror of BSB's, so only NT books get a
+    distinct MSB build; consumers wanting MSB-edition OT text should just
+    use BSB's OT output directly.
+    """
+    return build_index_cc_by(
+        usj_dir=USJ_MSB_DIR,
+        usj_files=USJ_FILES_MSB,
+        output_dir=MSB_INDEX_CC_BY_DIR,
+        book_codes=NT_BOOK_CODES,
+        edition="MSB",
+    )
 
 
 def main() -> None:

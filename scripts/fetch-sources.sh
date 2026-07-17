@@ -218,6 +218,17 @@ fetch_and_extract_usj_zip \
 USJ_PLAIN_COUNT=$(ls -1 "$USJ_PLAIN_DIR"/*.usj 2>/dev/null | wc -l | tr -d ' ')
 echo "Plain USJ files: $USJ_PLAIN_COUNT"
 
+# 1c. MSB (Majority Standard Bible) strongs_full USJ files. MSB ships from
+# the same bsb2usfm release as a full-canon zip (its OT mirrors BSB's
+# byte-for-byte), but we only ever build MSB-specific output for NT books.
+MSB_USJ_STRONGS_DIR="$SOURCES_DIR/msb-usj/results_usj/strongs_full"
+fetch_and_extract_usj_zip \
+    "MSB_full_strongs_usj.zip" \
+    "$MSB_USJ_STRONGS_DIR" \
+    "MSB Strong's USJ files" || true
+MSB_USJ_COUNT=$(ls -1 "$MSB_USJ_STRONGS_DIR"/*.usj 2>/dev/null | wc -l | tr -d ' ')
+echo "MSB Strong's USJ files: $MSB_USJ_COUNT"
+
 # Persist the resolved tag so subsequent runs can skip the (large) zip
 # downloads when the upstream release hasn't moved.
 mkdir -p "$SOURCES_DIR/bsb-usj"
@@ -314,6 +325,19 @@ if download_file "$BSB_TABLES_URL" "$BSB_TABLES_DIR/bsb_tables.tsv" "bsb_tables.
     echo "Downloaded bsb_tables.tsv"
 else
     echo "bsb_tables.tsv up to date"
+fi
+echo ""
+
+# 3b. MSB (Majority Standard Bible) NT tables — same column layout as BSB's,
+# used for the Hebrew/Greek (heb/grk) side of MSB display output.
+MSB_TABLES_DIR="$SOURCES_DIR/msb-tables"
+mkdir -p "$MSB_TABLES_DIR"
+
+MSB_TABLES_URL="https://majoritybible.com/msb_nt_tables.tsv"
+if download_file "$MSB_TABLES_URL" "$MSB_TABLES_DIR/msb_nt_tables.tsv" "msb_nt_tables.tsv"; then
+    echo "Downloaded msb_nt_tables.tsv"
+else
+    echo "msb_nt_tables.tsv up to date"
 fi
 echo ""
 
@@ -586,10 +610,12 @@ echo ""
 echo "Source data locations:"
 echo "  BSB-USJ (Strong's): $USJ_STRONGS_DIR/ ($USJ_COUNT files)"
 echo "  BSB-USJ (plain):    $USJ_PLAIN_DIR/ ($USJ_PLAIN_COUNT files)"
+echo "  MSB-USJ (Strong's): $MSB_USJ_STRONGS_DIR/ ($MSB_USJ_COUNT files)"
 echo "  Cross-refs:         $XREF_DIR/ ($XREF_COUNT files)"
 echo "  Strong's lexicon:   $STRONGS_DIR/"
 echo "  Nave's topics:      $NAVES_DIR/"
 echo "  BSB Tables:         $BSB_TABLES_DIR/"
+echo "  MSB Tables:         $MSB_TABLES_DIR/"
 echo "  OSHB:               $OSHB_DIR/ ($OSHB_COUNT files)"
 echo "  UBS Dictionaries:   $UBS_DIR/"
 echo "  UBS MARBLE Index:   $MARBLE_DIR/ ($MARBLE_COUNT files)"

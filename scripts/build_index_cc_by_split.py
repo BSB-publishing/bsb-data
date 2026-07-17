@@ -5,10 +5,12 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-from .types import BOOK_CODES, BuildStats, IndexVerseCCBY
+from .types import BOOK_CODES, NT_BOOK_CODES, BuildStats, IndexVerseCCBY
 from .utils import (
     INDEX_CC_BY_DIR,
     INDEX_CC_BY_SPLIT_DIR,
+    MSB_INDEX_CC_BY_DIR,
+    MSB_INDEX_CC_BY_SPLIT_DIR,
     ensure_dir,
     format_file_size,
     log,
@@ -19,26 +21,31 @@ from .utils import (
 )
 
 
-def build_index_cc_by_split() -> BuildStats:
+def build_index_cc_by_split(
+    source_dir: Path = INDEX_CC_BY_DIR,
+    output_dir: Path = INDEX_CC_BY_SPLIT_DIR,
+    book_codes: dict[int, str] = BOOK_CODES,
+    edition: str = "BSB",
+) -> BuildStats:
     """Build split CC-BY index output from the main index file.
 
     Reads from vector-db/index-cc-by/bible-index.jsonl and splits into
     per-chapter files under base/index-cc-by/{BOOK}/{BOOK}{chapter}.jsonl
     """
-    log("Building split CC-BY index output...")
+    log(f"Building split {edition} CC-BY index output...")
 
     # Check that the source index exists
-    source_path = INDEX_CC_BY_DIR / "bible-index.jsonl"
+    source_path = source_dir / "bible-index.jsonl"
     if not source_path.exists():
-        log("ERROR: CC-BY index not found. Run --index-cc-by first.")
+        log(f"ERROR: {edition} CC-BY index not found. Run --index-cc-by first.")
         log(f"  Expected: {source_path}")
         sys.exit(1)
 
     # Ensure output directory exists
-    ensure_dir(INDEX_CC_BY_SPLIT_DIR)
+    ensure_dir(output_dir)
 
     # Load all verses from the main index
-    log("Loading CC-BY index...")
+    log(f"Loading {edition} CC-BY index...")
     all_verses: list[IndexVerseCCBY] = read_jsonl(source_path)
     log(f"  Loaded {len(all_verses)} verses")
 
@@ -56,10 +63,10 @@ def build_index_cc_by_split() -> BuildStats:
     # Write output files
     log("Writing chapter files...")
     stats = BuildStats()
-    total_books = len(BOOK_CODES)
+    total_books = len(book_codes)
     files_written = 0
 
-    for book_num, book_code in BOOK_CODES.items():
+    for book_num, book_code in book_codes.items():
         log_book_progress(book_num, total_books, book_code)
 
         if book_code not in verses_by_book_chapter:
@@ -67,7 +74,7 @@ def build_index_cc_by_split() -> BuildStats:
             continue
 
         # Create book directory
-        book_dir = INDEX_CC_BY_SPLIT_DIR / book_code
+        book_dir = output_dir / book_code
         ensure_dir(book_dir)
 
         chapters = verses_by_book_chapter[book_code]
@@ -118,18 +125,18 @@ def build_index_cc_by_split() -> BuildStats:
     # Write stats
     stats_dict = stats.to_dict()
     stats_dict["files_written"] = files_written
-    stats_path = INDEX_CC_BY_SPLIT_DIR / "stats.json"
+    stats_path = output_dir / "stats.json"
     write_json(stats_path, stats_dict)
 
     # Log summary
     log("")
-    log("=== Split CC-BY Index Build Complete ===")
+    log(f"=== Split {edition} CC-BY Index Build Complete ===")
     log(f"Books processed: {stats.books_processed}")
     log(f"Total verses: {stats.total_verses}")
     log(f"Chapter files written: {files_written}")
 
     # Calculate total output size
-    total_size = sum(f.stat().st_size for f in INDEX_CC_BY_SPLIT_DIR.rglob("*.jsonl"))
+    total_size = sum(f.stat().st_size for f in output_dir.rglob("*.jsonl"))
     log(f"Total output size: {format_file_size(total_size)}")
 
     log("")
@@ -139,6 +146,16 @@ def build_index_cc_by_split() -> BuildStats:
     log("      See ATTRIBUTION.md for required attribution.")
 
     return stats
+
+
+def build_index_cc_by_split_msb() -> BuildStats:
+    """Build MSB (Majority Standard Bible) split CC-BY index output - NT books only."""
+    return build_index_cc_by_split(
+        source_dir=MSB_INDEX_CC_BY_DIR,
+        output_dir=MSB_INDEX_CC_BY_SPLIT_DIR,
+        book_codes=NT_BOOK_CODES,
+        edition="MSB",
+    )
 
 
 def main() -> None:

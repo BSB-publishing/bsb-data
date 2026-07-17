@@ -10,10 +10,62 @@ from .utils import normalize_strongs, read_json
 # bsb2usfm's "full Strong's" USJ marks a Strong's-tagged word that has no
 # surface form in the English translation (e.g. Hebrew's untranslatable
 # direct-object marker, an elided Greek article) with a literal "-" as the
-# word's text. Treat that placeholder as zero-width text rather than
-# literal display text, but keep the Strong's alignment and flag it as
-# elided so downstream consumers can filter or render it deliberately.
+# word's text.
 ELISION_PLACEHOLDER = "-"
+
+# Some words carry a Strong's number for a discontinuous/repeated occurrence
+# of an original-language word that's already covered by a nearby English
+# word (e.g. Hebrew's "between X and between Y" idiom rendered as a single
+# "between"). bsb2usfm marks the second occurrence with a bare all-dots run
+# (". . .", "...", etc.) instead of real text - either as its own Strong's
+# tagged word, or as untagged literal text between words. A lone "." is
+# ordinary terminal punctuation and is NOT part of this pattern.
+def _is_ellipsis_artifact(stripped: str) -> bool:
+    return bool(stripped) and stripped != "." and set(stripped) <= {".", " "}
+
+
+# Known upstream data-quality defects: literal placeholder tokens that leaked
+# into the public release in place of real English text. Unlike elision/
+# ellipsis above, these aren't a documented convention - there's no way to
+# recover the intended word, so they're stripped out (whole-word match, so a
+# real word like "revved" is untouched) but flagged as a "defect" rather than
+# folded silently into "elided".
+GARBLED_TOKEN_RE = re.compile(r"(?i)\bvvv\b")
+
+
+def _strip_garbled_tokens(text: str) -> tuple[str, bool]:
+    """Remove known upstream garbage placeholder tokens from text.
+
+    Returns (cleaned_text, found_any). Applies to both Strong's-tagged word
+    text and untagged literal text, since the defect shows up in both.
+    """
+    cleaned, count = GARBLED_TOKEN_RE.subn("", text)
+    return cleaned, count > 0
+
+
+# Square/curly brackets mark translator-supplied words (added for English
+# grammar/clarity, not literally present in the original language) baked
+# directly into the text as literal characters - both inside Strong's-tagged
+# words and in untagged literal text between them (e.g. a stray footnote
+# marker artifact like "[’’]"). Strip the bracket characters but keep the
+# underlying words; on Strong's-tagged words, flag the entry as containing
+# supplied text so consumers don't have to pattern-match on punctuation.
+SUPPLIED_MARKUP_RE = re.compile(r"[\[\]{}]")
+
+
+def _classify_placeholder(stripped: str) -> tuple[bool, str | None]:
+    """Classify a Strong's-tagged word's text as a known placeholder that
+    should be emptied rather than rendered literally.
+
+    Returns (is_elided, reason). reason is None for the base elision case
+    (matches the originally-shipped {"elided": true} schema exactly), and a
+    short string for the newer sub-cases so consumers can distinguish them.
+    """
+    if stripped == ELISION_PLACEHOLDER:
+        return True, None
+    if _is_ellipsis_artifact(stripped):
+        return True, "ellipsis"
+    return False, None
 
 
 def parse_usj_file(file_path: Path) -> list[DisplayVerse]:
@@ -28,7 +80,7 @@ def parse_usj_document(usj: dict[str, Any]) -> list[DisplayVerse]:
     current_book = ""
     current_chapter = 0
     current_verse = 0
-    current_words: list[tuple[str, str | None, bool]] = []
+    current_words: list[tuple[str, str | None, dict]] = []
     current_citations: list[str] = []
 
     def add_text(text: str) -> None:
@@ -37,9 +89,9 @@ def parse_usj_document(usj: dict[str, Any]) -> list[DisplayVerse]:
         if current_verse > 0:
             # Check if we can merge with previous word that has no strongs
             if current_words and current_words[-1][1] is None:
-                current_words[-1] = (current_words[-1][0] + text, None, False)
+                current_words[-1] = (current_words[-1][0] + text, None, {})
             else:
-                current_words.append((text, None, False))
+                current_words.append((text, None, {}))
 
     def extract_text(content: list[Any]) -> str:
         """Extract plain text from content array."""
@@ -79,22 +131,50 @@ def parse_usj_document(usj: dict[str, Any]) -> list[DisplayVerse]:
             if current_verse > 0:
                 text = extract_text(content)
                 strongs = normalize_strongs(char["strong"])
-                elided = text.strip() == ELISION_PLACEHOLDER
+
+                meta: dict = {}
+                elided, reason = _classify_placeholder(text.strip())
                 if elided:
                     text = ""
-                current_words.append((text, strongs, elided))
+                    meta["elided"] = True
+                    if reason:
+                        meta["reason"] = reason
+                else:
+                    text, had_defect = _strip_garbled_tokens(text)
+                    if SUPPLIED_MARKUP_RE.search(text):
+                        meta["supplied"] = True
+                        # Some source text wraps whitespace *inside* the
+                        # brackets (e.g. "[ their prayers ]"), so strip
+                        # leading/trailing space left behind by removing just
+                        # the bracket characters - word entries never carry
+                        # their own boundary whitespace; clean_words() below
+                        # inserts separator spaces between entries itself.
+                        text = SUPPLIED_MARKUP_RE.sub("", text).strip()
+                    if had_defect:
+                        if text.strip():
+                            # Garbage token removed but real text remains
+                            # (e.g. "vvv him" -> "him") - flag without emptying.
+                            meta["defect"] = True
+                        else:
+                            # Garbage token was the entry's only content -
+                            # same outcome as any other elided word.
+                            text = ""
+                            meta["elided"] = True
+                            meta["reason"] = "defect"
+
+                current_words.append((text, strongs, meta))
         else:
             # Other char types (wj, add, etc.) - may contain nested verses/words
             # Process content recursively to find verses and words inside
             process_content(content)
 
     def clean_words(
-        words: list[tuple[str, str | None, bool]],
-    ) -> list[tuple[str, str | None, bool]]:
+        words: list[tuple[str, str | None, dict]],
+    ) -> list[tuple[str, str | None, dict]]:
         """Clean and normalize word array with proper spacing."""
-        result: list[tuple[str, str | None, bool]] = []
+        result: list[tuple[str, str | None, dict]] = []
 
-        for text, strongs, elided in words:
+        for text, strongs, meta in words:
             # Skip empty text (but keep elided placeholders - they carry a strongs code)
             if not text and not strongs:
                 continue
@@ -104,7 +184,7 @@ def parse_usj_document(usj: dict[str, Any]) -> list[DisplayVerse]:
 
             # Merge with previous if both have no strongs
             if strongs is None and result and result[-1][1] is None:
-                result[-1] = (result[-1][0] + text, None, False)
+                result[-1] = (result[-1][0] + text, None, {})
             else:
                 # Add space before this word if needed. An elided word has empty
                 # text, so look back past any such entries for the nearest
@@ -123,9 +203,9 @@ def parse_usj_document(usj: dict[str, Any]) -> list[DisplayVerse]:
                         last_char = prev_text[-1]
                         first_char = text[0]
                         # Characters that shouldn't have space after them
-                        no_space_after = ' "\'(["\u201c\u2018'
+                        no_space_after = ' "\'(["“‘'
                         # Characters that shouldn't have space before them
-                        no_space_before = ',.;:!?)]\'""\u201d\u2019'
+                        no_space_before = ',.;:!?)]\'""”’'
                         # Don't add space after opening punctuation
                         if last_char in no_space_after:
                             needs_space = False
@@ -136,23 +216,40 @@ def parse_usj_document(usj: dict[str, Any]) -> list[DisplayVerse]:
                         else:
                             needs_space = True
                     if needs_space:
-                        result.append((" ", None, False))
-                result.append((text, strongs, elided))
+                        result.append((" ", None, {}))
+                result.append((text, strongs, meta))
 
         # Merge adjacent non-strongs entries
-        merged: list[tuple[str, str | None, bool]] = []
-        for text, strongs, elided in result:
+        merged: list[tuple[str, str | None, dict]] = []
+        for text, strongs, meta in result:
             if strongs is None and merged and merged[-1][1] is None:
-                merged[-1] = (merged[-1][0] + text, None, False)
+                merged[-1] = (merged[-1][0] + text, None, {})
             else:
-                merged.append((text, strongs, elided))
+                merged.append((text, strongs, meta))
+
+        # Collapse doubled boundary whitespace left behind when an elided
+        # (empty-text) entry sits between two plain-text spans that each
+        # independently carry their own boundary space (e.g. ", " + <elided>
+        # + " "" -> ", ""), by looking back past empty entries the same way
+        # the space-insertion pass above does.
+        deduped: list[tuple[str, str | None, dict]] = []
+        for text, strongs, meta in merged:
+            if text.startswith(" "):
+                prev_text = ""
+                for pt, _, _ in reversed(deduped):
+                    if pt:
+                        prev_text = pt
+                        break
+                if prev_text.endswith(" "):
+                    text = text.lstrip(" ")
+            deduped.append((text, strongs, meta))
 
         # Trim leading/trailing whitespace from first and last entries
-        if merged:
-            merged[0] = (merged[0][0].lstrip(), merged[0][1], merged[0][2])
-            merged[-1] = (merged[-1][0].rstrip(), merged[-1][1], merged[-1][2])
+        if deduped:
+            deduped[0] = (deduped[0][0].lstrip(), deduped[0][1], deduped[0][2])
+            deduped[-1] = (deduped[-1][0].rstrip(), deduped[-1][1], deduped[-1][2])
 
-        return merged
+        return deduped
 
     def save_current_verse() -> None:
         """Save the current verse if valid."""
@@ -161,11 +258,12 @@ def parse_usj_document(usj: dict[str, Any]) -> list[DisplayVerse]:
             # Clean up words - merge adjacent null-strongs entries and add spacing
             cleaned_words = clean_words(current_words)
 
-            # Convert to list format for JSON serialization. Elided (zero-surface-form)
-            # words are flagged with a third element so display-safe consumers can
-            # concatenate `w[0]` directly without leaking the elision placeholder.
+            # Convert to list format for JSON serialization. Words with metadata
+            # (elided, supplied, ...) get a third element so display-safe
+            # consumers can concatenate `w[0]` directly without ever seeing a
+            # placeholder token or raw bracket markup.
             w_list: list[tuple[str, str | None] | tuple[str, str | None, dict]] = [
-                (t, s, {"elided": True}) if elided else (t, s) for t, s, elided in cleaned_words
+                (t, s, meta) if meta else (t, s) for t, s, meta in cleaned_words
             ]
 
             verse_data: DisplayVerse = {
@@ -190,8 +288,21 @@ def parse_usj_document(usj: dict[str, Any]) -> list[DisplayVerse]:
         for item in content:
             if isinstance(item, str):
                 # Plain text (punctuation, spaces, etc.)
-                if item.strip() or item == " ":
-                    add_text(item)
+                stripped = item.strip()
+                if stripped and _is_ellipsis_artifact(stripped):
+                    # Untagged ellipsis artifact between words (same phenomenon
+                    # as the Strong's-tagged case above) - preserve the word
+                    # separation without leaking the literal dots.
+                    add_text(" ")
+                elif stripped or item == " ":
+                    # Untagged text can carry the same garbage-token and
+                    # bracket/brace artifacts as Strong's-tagged words (e.g. a
+                    # stray footnote marker like "[’’]" between two words).
+                    # There's no per-word Strong's alignment on plain text, so
+                    # just clean it silently rather than flag it.
+                    cleaned, _ = _strip_garbled_tokens(item)
+                    cleaned = SUPPLIED_MARKUP_RE.sub("", cleaned)
+                    add_text(cleaned)
             elif isinstance(item, dict):
                 item_type = item.get("type")
 

@@ -5,7 +5,7 @@ import argparse
 import sys
 
 from .build_concordance import build_concordance
-from .build_display import build_display
+from .build_display import build_display, build_display_msb
 from .build_english_concordance import build_english_concordance
 from .build_geography import build_geography
 from .build_greek_tsv import build_greek_tsv
@@ -14,9 +14,9 @@ from .build_lexicon import build_lexicon
 from .build_proper_names import build_proper_names
 from .build_versification import build_versification
 from .build_helloao import build_helloao
-from .build_index_cc_by import build_index_cc_by
-from .build_index_cc_by_split import build_index_cc_by_split
-from .build_index_pd import build_index_pd
+from .build_index_cc_by import build_index_cc_by, build_index_cc_by_msb
+from .build_index_cc_by_split import build_index_cc_by_split, build_index_cc_by_split_msb
+from .build_index_pd import build_index_pd, build_index_pd_msb
 from .build_text_only import build_text_only
 from .generate_metadata import main as generate_metadata
 from .utils import log
@@ -52,10 +52,33 @@ def main() -> int:
     parser.add_argument(
         "--all", action="store_true", help="Build all outputs (default if no options specified)"
     )
+    parser.add_argument(
+        "--display-msb", action="store_true", help="Build MSB display output (NT books only)"
+    )
+    parser.add_argument(
+        "--index-pd-msb", action="store_true", help="Build MSB PD index output (NT books only)"
+    )
+    parser.add_argument(
+        "--index-cc-by-msb",
+        action="store_true",
+        help="Build MSB CC-BY index output (NT books only)",
+    )
+    parser.add_argument(
+        "--index-cc-by-split-msb",
+        action="store_true",
+        help="Build split MSB CC-BY index (NT books only)",
+    )
+    parser.add_argument(
+        "--msb",
+        action="store_true",
+        help="Build all MSB outputs (display, index-pd, index-cc-by, index-cc-by-split)",
+    )
 
     args = parser.parse_args()
 
-    # Default to building all if no specific options
+    # Default to building all (BSB) outputs if no specific options given.
+    # MSB flags are opt-in only and never trigger (or are triggered by) --all,
+    # since MSB is a separate edition tree consumers request explicitly.
     build_all = args.all or not (
         args.display
         or args.index_pd
@@ -71,6 +94,11 @@ def main() -> int:
         or args.proper_names
         or args.versification
         or args.lexicon
+        or args.display_msb
+        or args.index_pd_msb
+        or args.index_cc_by_msb
+        or args.index_cc_by_split_msb
+        or args.msb
     )
 
     log("=== BSB Data Build Pipeline ===")
@@ -131,6 +159,22 @@ def main() -> int:
 
         if args.lexicon or build_all:
             build_lexicon()
+            log("")
+
+        if args.display_msb or args.msb:
+            build_display_msb()
+            log("")
+
+        if args.index_pd_msb or args.msb:
+            build_index_pd_msb()
+            log("")
+
+        if args.index_cc_by_msb or args.msb:
+            build_index_cc_by_msb()
+            log("")
+
+        if args.index_cc_by_split_msb or args.msb:
+            build_index_cc_by_split_msb()
             log("")
 
         # Always generate metadata when building all
