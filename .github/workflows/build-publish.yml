@@ -116,12 +116,12 @@ jobs:
         run: |
           echo "### Build Statistics" >> $GITHUB_STEP_SUMMARY
 
-          DISPLAY_COUNT=$(find output/base/display -name "*.jsonl" | wc -l)
+          DISPLAY_COUNT=$(find output/base/display -name "*.json" | wc -l)
           DISPLAY_SIZE=$(du -sh output/base/display | cut -f1)
           echo "- Display: $DISPLAY_COUNT books, $DISPLAY_SIZE" >> $GITHUB_STEP_SUMMARY
 
-          PD_LINES=$(wc -l < output/base/index-pd/bible-index.jsonl)
-          PD_SIZE=$(du -sh output/base/index-pd | cut -f1)
+          PD_LINES=$(wc -l < output/vector-db/index-pd/bible-index.jsonl)
+          PD_SIZE=$(du -sh output/vector-db/index-pd | cut -f1)
           echo "- Index-PD: $PD_LINES verses, $PD_SIZE" >> $GITHUB_STEP_SUMMARY
 
           CCBY_SIZE=$(du -sh output/base/index-cc-by | cut -f1)
