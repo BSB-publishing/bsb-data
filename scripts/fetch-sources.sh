@@ -480,9 +480,14 @@ if [ -f "$BSB_CONCORDANCE_DIR/bsb_concordance.xlsx" ]; then
        [ "$BSB_CONCORDANCE_DIR/bsb_concordance.xlsx" -nt "$BSB_CONCORDANCE_DIR/bsb_concordance.csv" ] || \
        [ "$BSB_CONC_DOWNLOADED" -eq 1 ]; then
         echo "  Converting XLSX to CSV..."
-        if python3 "$SCRIPT_DIR/convert_xlsx_to_csv.py" \
+        # Invoked as a package module (not a bare script path) so sys.path[0]
+        # is the project root rather than scripts/ itself - running it as a
+        # plain path puts scripts/ first on sys.path, which shadows the
+        # stdlib `types` module with scripts/types.py and breaks csv's own
+        # import chain (csv -> re -> enum -> types).
+        if (cd "$PROJECT_DIR" && python3 -m scripts.convert_xlsx_to_csv \
                    "$BSB_CONCORDANCE_DIR/bsb_concordance.xlsx" \
-                   "$BSB_CONCORDANCE_DIR/bsb_concordance.csv"; then
+                   "$BSB_CONCORDANCE_DIR/bsb_concordance.csv"); then
             echo "  Conversion complete"
         else
             echo "  WARNING: XLSX to CSV conversion failed (openpyxl required: pip install openpyxl)"
