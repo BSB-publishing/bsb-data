@@ -23,4 +23,4 @@ Then the LORD said to Moses, “This is what you are to tell the Israelites: ‘
 You are not to make any gods alongside Me; you are not to make for yourselves gods of silver or gold.
 You are to make for Me an altar of earth, and sacrifice on it your burnt offerings and peace offerings, your sheep and goats and cattle. In every place where I cause My name to be remembered, I will come to you and bless you.
 Now if you make an altar of stones for Me, you must not build it with stones shaped by tools; for if you use a chisel on it, you will defile it.
-And you must not go up to My altar on steps, lest your nakedness be exposed on it.’[’’]
+And you must not go up to My altar on steps, lest your nakedness be exposed on it.’’’

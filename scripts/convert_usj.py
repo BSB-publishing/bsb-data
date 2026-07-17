@@ -7,6 +7,14 @@ from typing import Any
 from .types import DisplayVerse
 from .utils import normalize_strongs, read_json
 
+# bsb2usfm's "full Strong's" USJ marks a Strong's-tagged word that has no
+# surface form in the English translation (e.g. Hebrew's untranslatable
+# direct-object marker, an elided Greek article) with a literal "-" as the
+# word's text. Treat that placeholder as zero-width text rather than
+# literal display text, but keep the Strong's alignment and flag it as
+# elided so downstream consumers can filter or render it deliberately.
+ELISION_PLACEHOLDER = "-"
+
 
 def parse_usj_file(file_path: Path) -> list[DisplayVerse]:
     """Parse a USJ file and extract verses with Strong's numbers."""
@@ -20,7 +28,7 @@ def parse_usj_document(usj: dict[str, Any]) -> list[DisplayVerse]:
     current_book = ""
     current_chapter = 0
     current_verse = 0
-    current_words: list[tuple[str, str | None]] = []
+    current_words: list[tuple[str, str | None, bool]] = []
     current_citations: list[str] = []
 
     def add_text(text: str) -> None:
@@ -29,9 +37,9 @@ def parse_usj_document(usj: dict[str, Any]) -> list[DisplayVerse]:
         if current_verse > 0:
             # Check if we can merge with previous word that has no strongs
             if current_words and current_words[-1][1] is None:
-                current_words[-1] = (current_words[-1][0] + text, None)
+                current_words[-1] = (current_words[-1][0] + text, None, False)
             else:
-                current_words.append((text, None))
+                current_words.append((text, None, False))
 
     def extract_text(content: list[Any]) -> str:
         """Extract plain text from content array."""
@@ -71,18 +79,23 @@ def parse_usj_document(usj: dict[str, Any]) -> list[DisplayVerse]:
             if current_verse > 0:
                 text = extract_text(content)
                 strongs = normalize_strongs(char["strong"])
-                current_words.append((text, strongs))
+                elided = text.strip() == ELISION_PLACEHOLDER
+                if elided:
+                    text = ""
+                current_words.append((text, strongs, elided))
         else:
             # Other char types (wj, add, etc.) - may contain nested verses/words
             # Process content recursively to find verses and words inside
             process_content(content)
 
-    def clean_words(words: list[tuple[str, str | None]]) -> list[tuple[str, str | None]]:
+    def clean_words(
+        words: list[tuple[str, str | None, bool]],
+    ) -> list[tuple[str, str | None, bool]]:
         """Clean and normalize word array with proper spacing."""
-        result: list[tuple[str, str | None]] = []
+        result: list[tuple[str, str | None, bool]] = []
 
-        for text, strongs in words:
-            # Skip empty text
+        for text, strongs, elided in words:
+            # Skip empty text (but keep elided placeholders - they carry a strongs code)
             if not text and not strongs:
                 continue
 
@@ -91,16 +104,24 @@ def parse_usj_document(usj: dict[str, Any]) -> list[DisplayVerse]:
 
             # Merge with previous if both have no strongs
             if strongs is None and result and result[-1][1] is None:
-                result[-1] = (result[-1][0] + text, None)
+                result[-1] = (result[-1][0] + text, None, False)
             else:
-                # Add space before this word if needed
-                if result and strongs is not None:
-                    prev_text, prev_strongs = result[-1]
+                # Add space before this word if needed. An elided word has empty
+                # text, so look back past any such entries for the nearest
+                # visible text to base the spacing decision on - and skip the
+                # decision entirely when this word is itself elided (there's
+                # nothing to visibly separate).
+                if result and strongs is not None and text:
+                    prev_text = ""
+                    for pt, _, _ in reversed(result):
+                        if pt:
+                            prev_text = pt
+                            break
                     # Check if we need a space between words
                     needs_space = False
                     if prev_text:
                         last_char = prev_text[-1]
-                        first_char = text[0] if text else ""
+                        first_char = text[0]
                         # Characters that shouldn't have space after them
                         no_space_after = ' "\'(["\u201c\u2018'
                         # Characters that shouldn't have space before them
@@ -115,21 +136,21 @@ def parse_usj_document(usj: dict[str, Any]) -> list[DisplayVerse]:
                         else:
                             needs_space = True
                     if needs_space:
-                        result.append((" ", None))
-                result.append((text, strongs))
+                        result.append((" ", None, False))
+                result.append((text, strongs, elided))
 
         # Merge adjacent non-strongs entries
-        merged: list[tuple[str, str | None]] = []
-        for text, strongs in result:
+        merged: list[tuple[str, str | None, bool]] = []
+        for text, strongs, elided in result:
             if strongs is None and merged and merged[-1][1] is None:
-                merged[-1] = (merged[-1][0] + text, None)
+                merged[-1] = (merged[-1][0] + text, None, False)
             else:
-                merged.append((text, strongs))
+                merged.append((text, strongs, elided))
 
         # Trim leading/trailing whitespace from first and last entries
         if merged:
-            merged[0] = (merged[0][0].lstrip(), merged[0][1])
-            merged[-1] = (merged[-1][0].rstrip(), merged[-1][1])
+            merged[0] = (merged[0][0].lstrip(), merged[0][1], merged[0][2])
+            merged[-1] = (merged[-1][0].rstrip(), merged[-1][1], merged[-1][2])
 
         return merged
 
@@ -140,8 +161,12 @@ def parse_usj_document(usj: dict[str, Any]) -> list[DisplayVerse]:
             # Clean up words - merge adjacent null-strongs entries and add spacing
             cleaned_words = clean_words(current_words)
 
-            # Convert to list format for JSON serialization
-            w_list: list[tuple[str, str | None]] = [(t, s) for t, s in cleaned_words]
+            # Convert to list format for JSON serialization. Elided (zero-surface-form)
+            # words are flagged with a third element so display-safe consumers can
+            # concatenate `w[0]` directly without leaking the elision placeholder.
+            w_list: list[tuple[str, str | None] | tuple[str, str | None, dict]] = [
+                (t, s, {"elided": True}) if elided else (t, s) for t, s, elided in cleaned_words
+            ]
 
             verse_data: DisplayVerse = {
                 "b": current_book,

@@ -25,6 +25,48 @@ WORD_ARRAY_SCHEMA = {
     "additionalProperties": False,
 }
 
+# English word array can additionally carry an elided (zero-surface-form) word:
+# a Strong's-tagged word with no surface form in the English translation (e.g.
+# Hebrew's untranslatable direct-object marker). `text` is always "" for these,
+# so concatenating `w[0]` across the array is always display-safe.
+ENG_WORD_ARRAY_SCHEMA = {
+    "type": "object",
+    "description": "Verse number mapped to word entries array",
+    "patternProperties": {
+        "^\\d+$": {
+            "type": "array",
+            "description": (
+                'Word entries: [text, strongs|null] normally, or '
+                '[text, strongs, {"elided": true}] for an elided word (text is always "")'
+            ),
+            "items": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 3,
+                "items": [
+                    {
+                        "type": "string",
+                        "description": 'Text content; always "" when the third element marks the entry as elided',
+                    },
+                    {
+                        "type": ["string", "null"],
+                        "description": "Strong's number (H1234 or G1234) or null",
+                        "pattern": "^[HG]\\d{1,4}[a-z]?$",
+                    },
+                    {
+                        "type": "object",
+                        "description": "Present only for elided (zero-surface-form) words",
+                        "required": ["elided"],
+                        "properties": {"elided": {"const": True}},
+                        "additionalProperties": False,
+                    },
+                ],
+            },
+        }
+    },
+    "additionalProperties": False,
+}
+
 DISPLAY_SCHEMA = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://github.com/bsb-data/schema/display.schema.json",
@@ -34,7 +76,7 @@ DISPLAY_SCHEMA = {
     "required": ["eng"],
     "properties": {
         "eng": {
-            **WORD_ARRAY_SCHEMA,
+            **ENG_WORD_ARRAY_SCHEMA,
             "description": "English text in BSB word order",
         },
         "heb": {
@@ -49,7 +91,14 @@ DISPLAY_SCHEMA = {
     "additionalProperties": False,
     "examples": [
         {
-            "eng": {1: [["In the beginning", "H7225"], ["God", "H430"], ["created", "H1254"]]},
+            "eng": {
+                1: [
+                    ["In the beginning", "H7225"],
+                    ["God", "H430"],
+                    ["", "H853", {"elided": True}],
+                    ["created", "H1254"],
+                ]
+            },
             "heb": {1: [["בְּרֵאשִׁ֖ית", "H7225"], ["בָּרָ֣א", "H1254"], ["אֱלֹהִ֑ים", "H430"]]},
         }
     ],

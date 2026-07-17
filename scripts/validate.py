@@ -81,12 +81,14 @@ def validate_display_output() -> tuple[bool, list[str]]:
                         errors.append(f"{chapter_file.name}:v{verse_num}: words not a list")
                         continue
                     for i, word_pair in enumerate(words):
-                        if not isinstance(word_pair, list) or len(word_pair) != 2:
+                        # [text, strongs] normally; elided (zero-surface-form) words
+                        # get a third {"elided": true} element instead of placeholder text
+                        if not isinstance(word_pair, list) or len(word_pair) not in (2, 3):
                             errors.append(
                                 f"{chapter_file.name}:v{verse_num}:w{i}: Invalid word pair"
                             )
                             continue
-                        text, strongs = word_pair
+                        text, strongs = word_pair[0], word_pair[1]
                         if strongs and not is_valid_strongs(strongs):
                             errors.append(
                                 f"{chapter_file.name}:v{verse_num}:w{i}: Invalid Strong's: {strongs}"

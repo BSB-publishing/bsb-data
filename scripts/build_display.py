@@ -238,8 +238,11 @@ def load_usj_data() -> dict:
             verse_num = verse["v"]
             words = verse["w"]
 
-            # Convert word tuples to list format [[text, strongs], ...]
-            word_list = [[text, strongs] for text, strongs in words]
+            # Convert word tuples to list format. Elided (zero-surface-form) words
+            # keep their [text, strongs] shape but with empty text, plus a third
+            # {"elided": true} element so consumers can filter them deterministically
+            # instead of pattern-matching on the "-" placeholder text.
+            word_list = [list(word) for word in words]
             data[book][chapter][verse_num] = word_list
 
     log(f"  Loaded USJ data for {len(data)} books")
@@ -394,7 +397,8 @@ def build_display() -> BuildStats:
                     eng_output[str(verse)] = eng_words
                     stats.total_verses += 1
                     stats.total_words += len(eng_words)
-                    for text, strongs in eng_words:
+                    for word in eng_words:
+                        strongs = word[1]
                         if strongs:
                             stats.words_with_strongs += 1
                             stats.unique_strongs.add(strongs)

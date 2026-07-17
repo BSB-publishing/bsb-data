@@ -133,10 +133,11 @@ def normalize_strongs(strongs: str) -> str:
     return f"{prefix.upper()}{int(num)}{suffix.lower()}"
 
 
-def extract_strongs_from_words(words: list[tuple[str, str | None]]) -> list[str]:
+def extract_strongs_from_words(words: list[tuple]) -> list[str]:
     """Extract all Strong's numbers from a verse's word pairs."""
     strongs_list: list[str] = []
-    for _, s in words:
+    for word in words:
+        s = word[1]
         if s:
             # Handle multiple strongs separated by /
             for part in s.split("/"):
@@ -146,9 +147,10 @@ def extract_strongs_from_words(words: list[tuple[str, str | None]]) -> list[str]
     return strongs_list
 
 
-def words_to_plain_text(words: list[tuple[str, str | None]]) -> str:
-    """Get plain text from word pairs."""
-    return "".join(text for text, _ in words).strip()
+def words_to_plain_text(words: list[tuple]) -> str:
+    """Get plain text from word pairs. Elided (zero-surface-form) words
+    contribute empty text, so they never appear as literal placeholder text."""
+    return "".join(word[0] for word in words).strip()
 
 
 def log(message: str) -> None:

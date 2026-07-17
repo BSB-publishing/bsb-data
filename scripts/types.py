@@ -152,7 +152,9 @@ class DisplayVerse(TypedDict, total=False):
     b: str  # Book code: "GEN", "EXO", etc.
     c: int  # Chapter number
     v: int  # Verse number
-    w: list[tuple[str, str | None]]  # [text, strongs] pairs
+    # [text, strongs] pairs; elided (zero-surface-form) words get a third
+    # {"elided": True} element instead of literal placeholder text
+    w: list[tuple[str, str | None] | tuple[str, str | None, dict]]
     citations: list[str]  # Scripture citations from footnotes ["2CO 4:6", "HEB 11:3"]
 
 

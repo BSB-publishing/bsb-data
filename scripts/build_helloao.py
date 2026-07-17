@@ -94,11 +94,12 @@ BOOK_NAMES: dict[str, str] = {
 }
 
 
-def words_to_helloao_content(words: list[tuple[str, str | None]]) -> list[Any]:
+def words_to_helloao_content(words: list[tuple]) -> list[Any]:
     """Convert word pairs to helloao content format."""
     content: list[Any] = []
 
-    for text, strongs in words:
+    for word in words:
+        text, strongs = word[0], word[1]
         if not text:
             continue
 

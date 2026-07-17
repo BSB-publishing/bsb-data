@@ -107,7 +107,7 @@ def build_index_cc_by() -> BuildStats:
             # Update stats
             stats.total_verses += 1
             stats.total_words += len(words)
-            stats.words_with_strongs += sum(1 for _, s in words if s)
+            stats.words_with_strongs += sum(1 for w in words if w[1])
             stats.unique_strongs.update(strongs_list)
 
             # Build index verse (CC-BY format with morphology)
