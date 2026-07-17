@@ -13,6 +13,11 @@ from .utils import normalize_strongs, read_json
 # word's text.
 ELISION_PLACEHOLDER = "-"
 
+# Characters that shouldn't have a space before them (closing punctuation).
+# Shared between the space-insertion logic and the boundary-whitespace
+# cleanup pass in clean_words() below.
+NO_SPACE_BEFORE = ',.;:!?)]\'""”’'
+
 # Some words carry a Strong's number for a discontinuous/repeated occurrence
 # of an original-language word that's already covered by a nearby English
 # word (e.g. Hebrew's "between X and between Y" idiom rendered as a single
@@ -41,6 +46,55 @@ def _strip_garbled_tokens(text: str) -> tuple[str, bool]:
     """
     cleaned, count = GARBLED_TOKEN_RE.subn("", text)
     return cleaned, count > 0
+
+
+# The ellipsis/hyphen elision placeholders above are usually their own
+# complete text span, but bsb2usfm sometimes glues one to adjacent real
+# punctuation in the same text node instead (e.g. " . . ., " before an open
+# quote, or " - ." before a close quote). These catch the placeholder as a
+# substring so it can be stripped while keeping the real punctuation around
+# it. A "-" used this way always stands alone (whitespace/string-boundary on
+# both sides); a real hyphenated word like "seed-bearing" never has
+# whitespace directly against its hyphen.
+ELLIPSIS_SUBSTRING_RE = re.compile(r"\.(?:\s?\.){2,}")
+ISOLATED_HYPHEN_RE = re.compile(r"(?<!\S)-(?!\S)")
+
+
+# A stray space glued directly before closing punctuation within a single
+# text span is never valid English typesetting - collapsed unconditionally,
+# regardless of what put it there. Covers both a literal source typo like
+# "Moreover , Shaphan" (one word's raw content, unrelated to any of the
+# placeholder patterns above) and a space left behind after stripping a
+# bracket/placeholder next to punctuation (e.g. "[the Sea] of Tiberias )").
+STRAY_SPACE_BEFORE_PUNCT_RE = re.compile(r"\s+([,.;:!?)\]])")
+
+# Mirror image of the above: a stray space glued directly after *opening*
+# punctuation (e.g. "( for" as one word's raw content, same as the
+# "Moreover , Shaphan" case above but on the other side). Character class
+# matches the "no_space_after" set already used by the space-insertion logic
+# below, for consistency.
+STRAY_SPACE_AFTER_OPEN_PUNCT_RE = re.compile(r"([\"'(\[“‘])\s+")
+
+
+def _collapse_stray_space_before_punct(text: str) -> str:
+    return STRAY_SPACE_BEFORE_PUNCT_RE.sub(r"\1", text)
+
+
+def _collapse_stray_space_after_open_punct(text: str) -> str:
+    return STRAY_SPACE_AFTER_OPEN_PUNCT_RE.sub(r"\1", text)
+
+
+def _strip_elision_artifacts(text: str) -> tuple[str, bool]:
+    """Remove ellipsis/hyphen elision-placeholder substrings glued to real
+    text/punctuation in the same span, tidying up the whitespace left behind.
+
+    Returns (cleaned_text, found_any).
+    """
+    cleaned, n1 = ELLIPSIS_SUBSTRING_RE.subn("", text)
+    cleaned, n2 = ISOLATED_HYPHEN_RE.subn("", cleaned)
+    if n1 or n2:
+        cleaned = re.sub(r"\s+", " ", cleaned)
+    return cleaned, bool(n1 or n2)
 
 
 # Square/curly brackets mark translator-supplied words (added for English
@@ -150,6 +204,10 @@ def parse_usj_document(usj: dict[str, Any]) -> list[DisplayVerse]:
                         # their own boundary whitespace; clean_words() below
                         # inserts separator spaces between entries itself.
                         text = SUPPLIED_MARKUP_RE.sub("", text).strip()
+                    # Defensive: an elision placeholder glued to real
+                    # punctuation within a single word's own content (not just
+                    # untagged text between words) - strips the same way.
+                    text, _ = _strip_elision_artifacts(text)
                     if had_defect:
                         if text.strip():
                             # Garbage token removed but real text remains
@@ -161,6 +219,8 @@ def parse_usj_document(usj: dict[str, Any]) -> list[DisplayVerse]:
                             text = ""
                             meta["elided"] = True
                             meta["reason"] = "defect"
+                    text = _collapse_stray_space_before_punct(text)
+                    text = _collapse_stray_space_after_open_punct(text)
 
                 current_words.append((text, strongs, meta))
         else:
@@ -204,13 +264,11 @@ def parse_usj_document(usj: dict[str, Any]) -> list[DisplayVerse]:
                         first_char = text[0]
                         # Characters that shouldn't have space after them
                         no_space_after = ' "\'(["“‘'
-                        # Characters that shouldn't have space before them
-                        no_space_before = ',.;:!?)]\'""”’'
                         # Don't add space after opening punctuation
                         if last_char in no_space_after:
                             needs_space = False
                         # Don't add space before closing punctuation
-                        elif first_char in no_space_before:
+                        elif first_char in NO_SPACE_BEFORE:
                             needs_space = False
                         # Add space between words
                         else:
@@ -243,6 +301,22 @@ def parse_usj_document(usj: dict[str, Any]) -> list[DisplayVerse]:
                 if prev_text.endswith(" "):
                     text = text.lstrip(" ")
             deduped.append((text, strongs, meta))
+
+        # A boundary space can also be left with nothing to separate on its
+        # *right*: an elision-artifact span (e.g. " - ") that stripped down to
+        # a bare space, immediately followed - after skipping empty elided
+        # entries - by closing punctuation that shouldn't have space before
+        # it (e.g. "kind" + <elided> + " " + <elided> + <elided> + ".""
+        # should read "kind."", not "kind ."").
+        for i, (text, strongs, meta) in enumerate(deduped):
+            if text.endswith(" "):
+                next_text = ""
+                for nt, _, _ in deduped[i + 1 :]:
+                    if nt:
+                        next_text = nt
+                        break
+                if next_text and next_text[0] in NO_SPACE_BEFORE:
+                    deduped[i] = (text.rstrip(" "), strongs, meta)
 
         # Trim leading/trailing whitespace from first and last entries
         if deduped:
@@ -289,19 +363,18 @@ def parse_usj_document(usj: dict[str, Any]) -> list[DisplayVerse]:
             if isinstance(item, str):
                 # Plain text (punctuation, spaces, etc.)
                 stripped = item.strip()
-                if stripped and _is_ellipsis_artifact(stripped):
-                    # Untagged ellipsis artifact between words (same phenomenon
-                    # as the Strong's-tagged case above) - preserve the word
-                    # separation without leaking the literal dots.
-                    add_text(" ")
-                elif stripped or item == " ":
-                    # Untagged text can carry the same garbage-token and
-                    # bracket/brace artifacts as Strong's-tagged words (e.g. a
-                    # stray footnote marker like "[’’]" between two words).
-                    # There's no per-word Strong's alignment on plain text, so
-                    # just clean it silently rather than flag it.
+                if stripped or item == " ":
+                    # Untagged text can carry the same garbage-token,
+                    # bracket/brace, and ellipsis/hyphen elision-placeholder
+                    # artifacts as Strong's-tagged words - including glued to
+                    # real punctuation in the same span (e.g. " . . ., " or
+                    # " - ."). There's no per-word Strong's alignment on plain
+                    # text, so just clean it silently rather than flag it.
                     cleaned, _ = _strip_garbled_tokens(item)
                     cleaned = SUPPLIED_MARKUP_RE.sub("", cleaned)
+                    cleaned, _ = _strip_elision_artifacts(cleaned)
+                    cleaned = _collapse_stray_space_before_punct(cleaned)
+                    cleaned = _collapse_stray_space_after_open_punct(cleaned)
                     add_text(cleaned)
             elif isinstance(item, dict):
                 item_type = item.get("type")
